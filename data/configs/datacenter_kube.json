@@ -1,0 +1,177 @@
+{
+  "notes":"Datacenter Generation",
+  "nums": {
+      "num_clusters": 1,
+      "num_hosts": 6,
+      "hosts_per_cluster": 6,
+      "num_containers": 6,
+      "resources": 2,
+      "container_types": 1
+  },
+  "metrics": {
+      "ram":"mb",
+      "cpu":"core"
+  },
+  "hosts_cap_rng": {
+      "0":
+      {
+        "ram": {
+          "min": 1870,
+          "max": 1870,
+          "step": 1
+        },
+        "cpu": {
+          "min": 1.252,
+          "max": 1.252,
+          "step": 1
+        }
+      },
+      "1":
+      {
+        "ram": {
+          "min": 5470,
+          "max": 5470,
+          "step": 1
+        },
+        "cpu": {
+          "min": 3.35,
+          "max": 3.35,
+          "step": 1
+        }
+      },
+      "2":
+      {
+        "ram": {
+          "min": 5470,
+          "max": 5470,
+          "step": 1
+        },
+        "cpu": {
+          "min": 5.35,
+          "max": 5.35,
+          "step": 1
+        }
+      },
+      "3":
+      {
+        "ram": {
+          "min": 1870,
+          "max": 1870,
+          "step": 1
+        },
+        "cpu": {
+          "min": 1252,
+          "max": 1252,
+          "step": 1
+        }
+      },
+      "4":
+      {
+        "ram": {
+          "min": 5470,
+          "max": 5470,
+          "step": 1
+        },
+        "cpu": {
+          "min": 3350,
+          "max": 3350,
+          "step": 1
+        }
+      },
+      "5":
+      {
+        "ram": {
+          "min": 5470,
+          "max": 5470,
+          "step": 1
+        },
+        "cpu": {
+          "min": 5.35,
+          "max": 5.35,
+          "step": 1
+        }
+      }
+  },
+  "container_conf" :{
+      "0":{
+          "ram": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          },
+          "cpu": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          }
+      },
+      "1":{
+          "ram": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          },
+          "cpu": {
+              "min": 1000,
+              "max": 1000,
+              "step": 1
+          }
+      },
+      "2":{
+          "ram": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          },
+          "cpu": {
+              "min": 1500,
+              "max": 1500,
+              "step": 1
+          }
+      },
+      "3":{
+          "ram": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          },
+          "cpu": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          }
+      },
+      "4":{
+          "ram": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          },
+          "cpu": {
+              "min": 1000,
+              "max": 1000,
+              "step": 1
+          }
+      },
+      "5":{
+          "ram": {
+              "min": 500,
+              "max": 500,
+              "step": 1
+          },
+          "cpu": {
+              "min": 1500,
+              "max": 1500,
+              "step": 1
+          }
+      }
+  },
+  "contexts": ["gke_resonant-petal-367513_europe-west1-b_cluster-1"],
+  "images": ["babarkhan93/yolo8n:0.1", "babarkhan93/yolo8s:0.1"],
+  "versions":["yolov8n", "yolov8s"],
+  "config_path": "~/.kube/config",
+  "datacenter_start_time": 0,
+  "datacenter_end_time": 5000,
+  "num_steps" : 20,
+  "seed": 42
+}
