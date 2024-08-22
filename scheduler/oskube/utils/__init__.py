@@ -1,4 +1,5 @@
-from .annotations import override, rounding
+from .annotations import override
+from .annotations import rounding
 from .preprocessors import Preprocessor
 
 from .constants import (

@@ -199,7 +199,7 @@
     "num_steps" : 20,
     "seed": 42,
     "env_config_base": {
-      "obs_elements": ["cpu_prediction", "containers_hosts", "hosts_alloc", "hosts_requests", "hosts_resources_util", 
+      "obs_elements": ["cpu_predictions", "containers_hosts", "hosts_resources_alloc", "hosts_resources_req", "hosts_resources_util", 
       "sla_violations", "containers_request"], 
       "penalty_illegal": -1,
       "penalty_move": 0,

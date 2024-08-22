@@ -6,6 +6,7 @@ from copy import deepcopy
 import sys
 import ray
 from ray import tune
+#from scheduler.Scheduler import Scheduler
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -13,6 +14,7 @@ from datacenter.Datacenter import * # TODO: update this list to import only reuq
 
 from utils.constants import (
     CONFIGS_PATH,
+    SCHEDULER_PATH,
     TRAIN_RESULTS_PATH,
     DATASETS_PATH
 )
@@ -27,18 +29,20 @@ def training(config_file, type_env, use_callback, checkpoint_freq):
     generator_config.update({
         'type_env': type_env, 
         'use_callback': use_callback,
-        'checkpoint_freq': checkpoint_freq,
-        'datasets': {
-            'bitbrains_path': bitbrains_path,
-            'yolo_path': yolo_path
-        }
+        'checkpoint_freq': checkpoint_freq
     })
 
     datacenter = DatacenterGeneration(generator_config)
+    #scheduler = Scheduler() 
 
     env_config = generator_config['env_config_base']
     env_config.update({
-        'datacenter': datacenter
+        'datacenter': datacenter,
+        'datasets': {
+            'bitbrains_path': bitbrains_path,
+            'yolo_path': yolo_path
+        },
+        'scheduler_path': SCHEDULER_PATH
     })
 
     if type_env not in ['CartPole-v0', 'Pendulum-v0']:
@@ -52,7 +56,8 @@ def training(config_file, type_env, use_callback, checkpoint_freq):
     
     print(ray_config)
     
-    ray.init(debug=True)
+    ray.init(local_mode=True)
+
     _ = tune.run(config=ray_config,
                  run_or_experiment="IMPALA",
                  resume=False)

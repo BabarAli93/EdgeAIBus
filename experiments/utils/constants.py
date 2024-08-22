@@ -13,6 +13,7 @@ PROJECT_PATH = "/home/babarali/OSKube"
 # generated baesd on the users' path
 DATA_PATH = os.path.join(PROJECT_PATH, "data")
 DATASETS_PATH = os.path.join(PROJECT_PATH, 'datasets')
+SCHEDULER_PATH = os.path.join(PROJECT_PATH, 'scheduler')
 TRAIN_RESULTS_PATH = os.path.join(DATA_PATH, "trainresults")
 TESTS_RESULTS_PATH = os.path.join(DATA_PATH, "testresults")
 

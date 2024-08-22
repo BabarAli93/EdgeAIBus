@@ -67,6 +67,7 @@ class DatacenterGeneration:
         else:
             self.kube = True
 
+        self.cpu_core_count = {2: 0, 4: 0, 6: 0} # keeping conut of each core for predictions
         self.containers_request = np.full((self.num_containers, 3), -1)
         self.hosts_resources_util = np.full((self.num_hosts, 3), -1.0)
         self.containers_hosts = np.ones(self.num_containers, dtype=int) * (-1)  # TODO to be removed
@@ -527,6 +528,7 @@ class DatacenterGeneration:
         return self.hosts_resources_cap
     
     def hosts_resources_capacities_sim(self, hosts_cap_rng):
+        
         nodes_ids = np.arange(self.num_hosts).reshape(self.num_hosts, 1)
         nodes_ram = np.zeros((self.num_hosts, 1))
         for index, key in hosts_cap_rng.items():
@@ -537,6 +539,11 @@ class DatacenterGeneration:
         for index, key in hosts_cap_rng.items():
             nodes_cpu_cap = key['cpu']['cap']
             nodes_cpu[int(index)] = nodes_cpu_cap
+
+            nodes_cpu_cap /= 1000
+
+            if nodes_cpu_cap in self.cpu_core_count:
+                self.cpu_core_count[nodes_cpu_cap] += 1
 
         hosts_resources_cap = np.concatenate((nodes_ids, nodes_cpu, nodes_ram),
                                                     axis=1)

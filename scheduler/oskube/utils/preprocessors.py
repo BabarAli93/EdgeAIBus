@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Dict
-from oskube.utils import rounding
+#from oskube.utils import rounding
+from scheduler.oskube.utils import rounding
 
 # TODO complete based on the new needs
 
