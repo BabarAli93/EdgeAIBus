@@ -4,27 +4,17 @@ import os
 import pickle
 from typing import (
     Dict,
-    Any
+    Any,
+    List
 )
-
-import re
-from itertools import product
-import matplotlib.pyplot as plt
 import warnings
-
 import time
 import datetime
 from sklearn.model_selection import train_test_split
-import matplotlib.dates as mdates
 
-import torch
 from neuralforecast import NeuralForecast
 from neuralforecast.models import PatchTST
 from neuralforecast.losses.pytorch import RMSE
-from neuralforecast.utils import AirPassengers, AirPassengersPanel, AirPassengersStatic, augment_calendar_df
-from neuralforecast.utils import AirPassengersDF
-
-from sklearn.metrics import mean_absolute_error, r2_score
 
 # Suppress FutureWarning
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -36,9 +26,7 @@ class Scheduler:
         self.bitbrains_path = config['bitbrains_path']
         self.scheduler_path = config['scheduler_path']
         self.unique_cores = 3 # considering only 2, 4 and 6 core machines in this dataset
-        self.patch_np_preds = None
-
-        # TODO assert for training and testing prediction lengths
+        self.patch_np_preds: List[np.ndarray] = []
         self.df = self.dataset_reading()
         predictions_path = os.path.join(self.scheduler_path, 'patchtst_predictions_np.pkl')
         try:
@@ -146,6 +134,7 @@ class Scheduler:
 
         return df
 
+
     def df_processing(self, df):
         df.columns = df.columns.str.replace('\t', '')
         df['DateTime'] = df['Timestamp [ms]'].apply(lambda x: datetime.datetime.fromtimestamp(x).replace(second=0, microsecond=0))
@@ -211,3 +200,11 @@ class Scheduler:
             df_test = df_test[~df_test.index.isin(test_values.index)].reset_index(drop=True)
 
         return all_preds, all_preds_array
+    
+
+    def yolo_active_indices(self, containers_request, containers_model, mapper:np.ndarray):
+        cpu_model_array = np.array(list(zip(containers_request, containers_model)))
+
+        indices = np.where((cpu_model_array[:, None] == mapper).all(-1))[1]
+
+        return indices

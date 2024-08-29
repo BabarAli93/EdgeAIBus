@@ -6,13 +6,12 @@ from scheduler.oskube.utils import rounding
 # TODO complete based on the new needs
 
 class Preprocessor():
-    def __init__(self, max_services_nodes: int,
-                 cluster_nodes_capacities: np.ndarray,
-                 services_resources_request: np.ndarray,):
-        self.nodes_resources_cap = cluster_nodes_capacities
-        self.services_resources_request = services_resources_request
-        self.num_nodes = cluster_nodes_capacities.shape[0]
-        self.max_services_nodes = max_services_nodes
+    def __init__(self, cluster_hosts_allocatable: np.ndarray,
+                 containers_resources_request: np.ndarray,):
+        self.hosts_resources_alloc = cluster_hosts_allocatable
+        self.containers_resources_request = containers_resources_request
+        self.num_hosts = cluster_hosts_allocatable.shape[0]
+        #self.max_services_nodes = max_services_nodes
 
     @rounding
     def transform(self, observation: Dict[str, np.ndarray]) -> np.ndarray:
@@ -23,24 +22,21 @@ class Preprocessor():
         """
         obs = np.array([])
         transformers = {
-            "backlog_services_requests": self._nodes_normalizer,
-            "nodes_capacities": self._nodes_normalizer,
-            "nodes_usages": self._nodes_normalizer,
-            "nodes_requests": self._nodes_normalizer,
-            "nodes_available": self._nodes_normalizer,
-            "nodes_unused": self._nodes_normalizer,
-            "nodes_slack": self._nodes_normalizer,
-            "nodes_usages_frac":self._none,
-            "nodes_resources_unused_avg": self._none,
-            "num_consolidated": self._one_hot_consolidation,
-            "num_services_nodes": self._one_hot_services_nodes
+            "cpu_predictions": self._percentage_normalizer,
+            "hosts_resources_alloc": self._hosts_normalizer,
+            "hosts_resources_req": self._hosts_normalizer,
+            "hosts_resources_usage": self._hosts_normalizer,
+            "containers_request": self._services_request_normalizer,
+            "containers_usage": self._services_request_normalizer,
+            "containers_accuracy": self._percentage_normalizer,
+            "containers_hosts": self._one_hot_containers_nodes,
         }
         for key, val in observation.items():
             obs = np.concatenate((obs, transformers.get(
                 key, self._invalid_operation)(val).flatten()))
         return obs
 
-    def _services_usage_normalizer(self, obs: np.ndarray) -> np.ndarray:
+    def _services_request_normalizer(self, obs: np.ndarray) -> np.ndarray:
         """
         divides the largest available of each resource by the
         capacity of the largest size of that resource in the cluster
@@ -49,11 +45,11 @@ class Preprocessor():
             ram_usage_of_a_service / largest_ram_capacity_of_any_conrainer
         """
         lst = []
-        for index in range(self.services_resources_request.shape[1]):
-            lst.append(max(self.services_resources_request[:, index]))
+        for index in range(self.containers_resources_request.shape[1]):
+            lst.append(max(self.containers_resources_request[:, index]))
         return obs/lst
 
-    def _nodes_normalizer(self, obs: np.ndarray) -> np.ndarray:
+    def _hosts_normalizer(self, obs: np.ndarray) -> np.ndarray:
         """
         divides the largest available of each resource by the
         capacity of the largest size of that resource in the cluster
@@ -62,39 +58,36 @@ class Preprocessor():
             ram_usage_of_a_node / largest_ram_capacity_of_any_node
         """
         lst = []
-        for index in range(self.nodes_resources_cap.shape[1]):
-            lst.append(max(self.nodes_resources_cap[:, index]))
+        for index in range(self.hosts_resources_alloc.shape[1]):
+            lst.append(max(self.hosts_resources_alloc[:, index]))
         return obs/lst
+    
+    def _percentage_normalizer(self, obs: np.ndarray) -> np.ndarray:
+        """
+            dividing CPU predicted usage by 100 to convert to [0,1]
+            """
+                
+        return obs/100
 
     def _none(self, obs: np.ndarray) -> np.ndarray:
         return obs
 
-    def _one_hot_services_nodes(
+    def _one_hot_containers_nodes(
         self, obs: np.ndarray) -> np.ndarray:
         """
-        one hot encoding of the services_nodes
+        one hot encoding of the containers_hosts
         e.g in a cluster of 2 nodes and 4 services:
             [0, 1, 1, 0]
         results in:
             [0, 0, 0, 1, 0, 1, 0, 0]
         """
-        obs_prep = np.array([])
 
-        for node in obs:
-            one_hot_encoded = np.zeros(self.max_services_nodes + 1)
-            one_hot_encoded[node] = 1
+        obs_prep = np.array([])
+        for host in obs:
+            one_hot_encoded = np.zeros(self.num_hosts)
+            one_hot_encoded[host] = 1
             obs_prep = np.concatenate((obs_prep, one_hot_encoded))
         return obs_prep
-
-    def _one_hot_consolidation(
-        self, obs: np.ndarray) -> np.ndarray:
-        """
-        one hot encoding of the number of consolidated
-        servers in the cluster
-        """
-        one_hot_encoded = np.zeros(self.num_nodes)
-        one_hot_encoded[obs-1] = 1
-        return one_hot_encoded
 
     def _invalid_operation(self, obs: np.ndarray) -> None:
         raise ValueError(f"invalid observation: <{obs}>")

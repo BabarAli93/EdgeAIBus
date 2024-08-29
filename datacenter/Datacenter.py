@@ -4,6 +4,7 @@ from copy import deepcopy
 import re
 import pandas as pd
 import sys
+import os
 from kubeframework.utils.kube_utils.multi_cluster import MultiCluster
 from .Deployment import *
 from kubeframework.utils.kube_utils.utils import (
@@ -19,6 +20,7 @@ from kubeframework.utils.kube_utils.utils import (
 from typing import (
     Dict,
     Any,
+    List,
     Tuple
 )
 
@@ -46,6 +48,11 @@ class DatacenterGeneration:
         self.hosts_cap_rng = config['hosts_cap_rng']
         self.container_conf = config['container_conf']
         self.num_resources = config['nums']['resources']  ## cpu and ram. there are 2 resources
+        self.yolodata = []
+        self.yolo_accuracies = dict({
+            0: 37.3,
+            1: 44.9
+        })
 
         assert (self.hosts_per_cluster * self.num_clusters) == self.num_hosts, 'make sure the commulative nodes in each cluster equals num_hosts'
 
@@ -69,7 +76,10 @@ class DatacenterGeneration:
 
         self.cpu_core_count = {2: 0, 4: 0, 6: 0} # keeping conut of each core for predictions
         self.containers_request = np.full((self.num_containers, 3), -1)
-        self.hosts_resources_util = np.full((self.num_hosts, 3), -1.0)
+        self.containers_model = np.ones(self.num_containers, dtype=int)
+        self.containers_usages =  np.full((self.num_containers, 2), -1)
+        self.hosts_resources_util = np.full((self.num_hosts, 3), -1.0) # request based usage
+        self.hosts_resources_usage = np.full((self.num_hosts, 2), -1)  # actual usage based on Yolo
         self.containers_hosts = np.ones(self.num_containers, dtype=int) * (-1)  # TODO to be removed
         self.containers_hosts_tuple = [(-1, -1) for _ in range(self.num_containers)] # generating (-1, -1) tuples of num_containers
         if self.kube:
@@ -82,10 +92,11 @@ class DatacenterGeneration:
         elif self.simulation:
             
             self.containers_request = self.containers_requests()
+            #self.containers_model = self.container_model_assignment()
             self.hosts_resources_cap =  self.hosts_resources_capacities_sim(self.hosts_cap_rng)
             self.hosts_resources_alloc = self.hosts_resources_allocatable_sim(self.hosts_cap_rng)
             self.hosts_resources_remain = self.hosts_resources_remaining_init(self.hosts_cap_rng)
-            self.hosts_resources_req = self.hosts_resources_requested_init(self.hosts_cap_rng)
+            self.hosts_resources_req, self.hosts_resources_req_yolo = self.hosts_resources_requested_init(self.hosts_cap_rng)
             self.hosts_resources_util[:, 0] = self.hosts_resources_alloc[:, 0]
             self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req[:,1:]/self.hosts_resources_alloc[:, 1:])*100
             
@@ -495,7 +506,13 @@ class DatacenterGeneration:
         #             popped_hosts.append(host)
 
         return self.containers_hosts
-    
+
+
+    # def container_model_assignment(self):
+        
+    #     for index in range(self.containers_model.shape[0]):
+    #         self.containers_model[index] = 1
+
     
     def containers_requests(self):
 
@@ -544,6 +561,12 @@ class DatacenterGeneration:
 
             if nodes_cpu_cap in self.cpu_core_count:
                 self.cpu_core_count[nodes_cpu_cap] += 1
+        
+        # Get all unique values from the dictionary
+        unique_counts = set(self.cpu_core_count.values())
+        # Assert that there is only one unique value (i.e., all counts are the same)
+        assert len(unique_counts) == 1, "Provide same number of machines for each core."
+        self.core_repeator = list(self.cpu_core_count.values())[0]
 
         hosts_resources_cap = np.concatenate((nodes_ids, nodes_cpu, nodes_ram),
                                                     axis=1)
@@ -679,21 +702,11 @@ class DatacenterGeneration:
 
         hosts_resources_req = np.concatenate((nodes_ids, nodes_cpu, nodes_ram),
                                                     axis=1)
+        hosts_resources_req_yolo = np.concatenate((nodes_cpu, nodes_ram), axis=1)
         
-        return hosts_resources_req.astype(int)
-    @property
-    def host_resources_request(self):
-        """return the amount of resource requested
-        on each node by the containers
-        """
-        hosts_resources_request = []
-        for host in range(self.num_hosts):
-            container_in_host = np.where(self.containers_hosts == host)[0]
-            host_resources_usage = sum(self.containers_resources_request[container_in_host][:, 1:])
-            if type(host_resources_usage) != np.ndarray:
-                host_resources_usage = np.zeros(self.num_resources)
-            hosts_resources_request.append(host_resources_usage)
-        return np.array(hosts_resources_request)
+        # TODO: Create an array of profiled CPU and Memory requested which will be used for actual usage
+        return hosts_resources_req.astype(int), hosts_resources_req_yolo.astype(int)
+
 
     @property
     def hosts_resources_available(self):  # TODO have two version for request and usage separately
@@ -725,19 +738,19 @@ class DatacenterGeneration:
     def cluster_generation(self):
         return 0
 
-    @property
-    def containers_resources_usage(self):
-        """return the fraction of resource usage for each node
-        workload at current timestep e.g. at time step 0:
-        """
-        """this one is based on the usage model not the request. We will update it for dynamic use case"""
-        # TODO: Update it for Dynamic use case
-        self.containers_types = []
-        for index, val in enumerate(self.container_types_map):
-            self.containers_types.extend(itertools.repeat(index, val))
-        containers_workloads = np.array(list(map(lambda container_type: self.start_workload[container_type], self.containers_types)))
-        containers_resources_usage = containers_workloads * self.containers_resources_request[:, 1:]
-        return containers_resources_usage
+    # @property
+    # def containers_resources_usage(self):
+    #     """return the fraction of resource usage for each node
+    #     workload at current timestep e.g. at time step 0:
+    #     """
+    #     """this one is based on the usage model not the request. We will update it for dynamic use case"""
+    #     # TODO: Update it for Dynamic use case
+    #     self.containers_types = []
+    #     for index, val in enumerate(self.container_types_map):
+    #         self.containers_types.extend(itertools.repeat(index, val))
+    #     containers_workloads = np.array(list(map(lambda container_type: self.start_workload[container_type], self.containers_types)))
+    #     containers_resources_usage = containers_workloads * self.containers_resources_request[:, 1:]
+    #     return containers_resources_usage
     
     # def containers_resources_request(self, containers_conf):
 
@@ -756,3 +769,109 @@ class DatacenterGeneration:
     #                                                     axis=1)
         
     #     return containers_resources_request.astype(int)
+
+    def containers_resources_usage(self, timestep:int, yoloindices: List[int]):
+        """
+        it should return the resource usage for current timestep and active model version for each container.
+        it can be further used by Hosts resource usage
+        We will make use of self.yolodata and timestep
+        arguments can be: timestep and list of indices for yolo
+        """
+        container_usage_local = deepcopy(self.containers_usages)
+        
+        for id, container in enumerate(self.containers_usages):
+            container_usage_local[id] = self.yolodata[yoloindices[id]][timestep][2:4]
+
+        self.containers_usages = container_usage_local
+        return self.containers_usages
+    
+    def hosts_resources_usages(self, timestep:int, yoloindices: List[int]):
+
+        """
+        this function should get us the resource usages of nodes.
+        1. identfiy the ids of of active containers,
+        2. use those ids on the 'self.containers_usages' and sum the values + also add the already requested resources of each node
+        """
+        host_resources_usage = []
+        containers_usage = self.containers_resources_usage(timestep, yoloindices)
+
+        for host in range(self.num_hosts):
+            container_in_host = np.where(self.containers_hosts == host)[0]
+            host_resources = sum(containers_usage[container_in_host])
+            host_resources += self.hosts_resources_req_yolo[host]
+            host_resources_usage.append(host_resources)
+        
+        self.hosts_resources_usage = np.array(host_resources_usage)
+        return self.hosts_resources_usage
+    
+    @property
+    def host_resources_request(self):
+        """return the amount of resource requested
+        on each node by the containers
+        """
+        hosts_resources_request = []
+        for host in range(self.num_hosts):
+            container_in_host = np.where(self.containers_hosts == host)[0]
+            host_resources_usage = sum(self.containers_resources_request[container_in_host][:, 1:])
+            if type(host_resources_usage) != np.ndarray:
+                host_resources_usage = np.zeros(self.num_resources)
+            hosts_resources_request.append(host_resources_usage)
+        return np.array(hosts_resources_request)
+    
+    @property
+    def yolo_active_accuracies(self):
+
+        """
+        it should return a numpy arrry of active models accuracies
+        """
+        return np.array([self.yolo_accuracies[model] for model in self.containers_model])
+
+    def yolo_reading(self, path):
+
+        # YOLO will store values in following format:
+        """
+            (500,0): 0 => Nano 500
+            (500,1): 1 => Small 500
+            (1000,0): 2 => Nano 1000
+            (1000,1): 3 => Small 1000
+            (1500,0): 4 => Nano 1500
+            (1500,1): 5 => Small 1500
+        """
+        files = ['yolopodn0.csv', 'yolopods0.csv', 'yolopodn1.csv', 'yolopods1.csv', 'yolopodn15.csv', 'yolopods15.csv']
+
+        dfs = []
+        for file in files:
+            read_csv =  pd.read_csv(os.path.join(path, file))
+            processed_df = self.process_yolo(read_csv)
+            dfs.append(processed_df)
+
+        desired_order = ['cpu_request', 'memory_request', 'cpu_usage', 'memory_usage',
+        'model', 'model_acc', 'processing_delay(ms)']
+
+        result_list = []        
+        for df in dfs:
+            df = df[desired_order]
+            values = df.to_numpy()
+            result_list.append(values)
+        
+        self.yolodata = result_list
+        
+        return self.yolodata
+    
+    def process_yolo(self, df):
+        # Remove 'm' from CPU columns and convert to integer
+        df = df.dropna()
+        df = df.drop('time', axis=1)
+        df.loc[:, 'cpu_request'] = df['cpu_request'].str.replace('m', '').astype(int)
+        df.loc[:, 'cpu_usage'] = df['cpu_usage'].str.replace('m', '').astype(int)
+
+        # Remove 'Mi' from memory columns and convert to integer using .loc
+        df.loc[:, 'memory_request'] = df['memory_request'].str.replace('Mi', '').astype(int)
+        df.loc[:, 'memory_usage'] = df['memory_usage'].str.replace('Mi', '').astype(int)
+        # Binary encode the 'model' column using .loc
+        df.loc[:, 'model'] = df['model'].map({'nano': 0, 'small': 1})
+        df.loc[:, 'processing_delay(ms)'] = df['processing_delay(ms)']/1000
+
+        print(max(df['processing_delay(ms)']))
+        
+        return df
