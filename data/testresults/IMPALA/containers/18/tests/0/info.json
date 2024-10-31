@@ -1,0 +1,12 @@
+{
+    "type_env": "sim-edge",
+    "checkpoint": 4,
+    "experiment_str": "IMPALA_SimEdgeEnv_7f87e_00000_0_2024-10-14_20-14-13",
+    "episode_length": 7000,
+    "num_episodes": 1,
+    "algorithm": "IMPALA",
+    "penalty_accuracy": 10,
+    "penalty_sla": -4,
+    "penalty_consolidation": 10,
+    "num_workers": 3
+}

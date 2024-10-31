@@ -16,12 +16,11 @@ DATASETS_PATH = os.path.join(PROJECT_PATH, 'datasets')
 SCHEDULER_PATH = os.path.join(PROJECT_PATH, 'scheduler')
 TRAIN_RESULTS_PATH = os.path.join(DATA_PATH, "trainresults")
 TESTS_RESULTS_PATH = os.path.join(DATA_PATH, "testresults")
+RAY_LOGS_PATH = os.path.join(DATA_PATH, "ray_logs")
 
 CONFIGS_PATH = os.path.join(DATA_PATH, "configs")
 #BACKUP_PATH = os.path.join(DATA_PATH, "backup")
 PLOTS_PATH = os.path.join(DATA_PATH, "plots")
-#ARABESQUE_PATH = os.path.join(DATA_PATH, "arabesque")
-#ALIBABA_PATH = os.path.join(DATA_PATH, "alibaba")
 
 def _create_dirs():
     """
@@ -39,6 +38,8 @@ def _create_dirs():
         os.makedirs(TESTS_RESULTS_PATH)
     if not os.path.exists(PLOTS_PATH):
         os.makedirs(PLOTS_PATH)
+    if not os.path.exists(RAY_LOGS_PATH):
+        os.makedirs(RAY_LOGS_PATH)
 
 _create_dirs()
 

@@ -45,9 +45,10 @@ class DatacenterGeneration:
         self.hosts_per_cluster = config['nums']['hosts_per_cluster']  
         self.num_containers = config['nums']['num_containers']  ## number of containers or services
         self.type_env = config['type_env']
-        self.hosts_cap_rng = config['hosts_cap_rng']
-        self.container_conf = config['container_conf']
+        self.hosts_cap_rng = self.dict_sorter(config['hosts_cap_rng'])
+        self.container_conf = self.dict_sorter(config['container_conf'])
         self.num_resources = config['nums']['resources']  ## cpu and ram. there are 2 resources
+        self.yolo_sample_count = 50
         self.yolodata = []
         self.yolo_accuracies = dict({
             0: 37.3,
@@ -66,6 +67,11 @@ class DatacenterGeneration:
         assert len(config['metrics']) == self.num_resources, \
             "number of metrics is not equal to the number of resources"
 
+        assert len(self.container_conf) == self.num_containers, \
+            "number of containers and container dictionary items are not equal!"
+
+        assert len(self.hosts_cap_rng) == self.num_hosts, \
+            "number of hosts/servers and hosts dictionary items are not equal!"
         
         self.simulation = False
         self.kube = False
@@ -124,10 +130,10 @@ class DatacenterGeneration:
         self.num_containers_types = config['nums']['container_types']  ## There are One type of containers at the moment
 
         ## Need to get Containers and Hosts capacities
-        self.datacenter_start_time = config['datacenter_start_time']
-        self.datacenter_end_time = config['datacenter_end_time']
-        assert self.datacenter_end_time - self.datacenter_start_time > 0
-        self.num_steps = config['num_steps']
+        #self.datacenter_start_time = config['datacenter_start_time']
+        #self.datacenter_end_time = config['datacenter_end_time']
+        #assert self.datacenter_end_time - self.datacenter_start_time > 0
+        #self.num_steps = config['num_steps']
         
         # using this to contianer container's changing string details
         self.containers_ips = []
@@ -770,7 +776,8 @@ class DatacenterGeneration:
         
     #     return containers_resources_request.astype(int)
 
-    def containers_resources_usage(self, timestep:int, yoloindices: List[int]):
+    @property
+    def containers_resources_usage(self):
         """
         it should return the resource usage for current timestep and active model version for each container.
         it can be further used by Hosts resource usage
@@ -779,13 +786,14 @@ class DatacenterGeneration:
         """
         container_usage_local = deepcopy(self.containers_usages)
         
-        for id, container in enumerate(self.containers_usages):
-            container_usage_local[id] = self.yolodata[yoloindices[id]][timestep][2:4]
+        for id, _ in enumerate(self.containers_usages):
+            container_usage_local[id] = self.yolo_sample_usage[id][2:4]
 
         self.containers_usages = container_usage_local
         return self.containers_usages
     
-    def hosts_resources_usages(self, timestep:int, yoloindices: List[int]):
+    @property
+    def hosts_resources_usages(self):
 
         """
         this function should get us the resource usages of nodes.
@@ -793,7 +801,7 @@ class DatacenterGeneration:
         2. use those ids on the 'self.containers_usages' and sum the values + also add the already requested resources of each node
         """
         host_resources_usage = []
-        containers_usage = self.containers_resources_usage(timestep, yoloindices)
+        containers_usage = self.containers_resources_usage
 
         for host in range(self.num_hosts):
             container_in_host = np.where(self.containers_hosts == host)[0]
@@ -805,26 +813,172 @@ class DatacenterGeneration:
         return self.hosts_resources_usage
     
     @property
-    def host_resources_request(self):
+    def cluster_mean_usage_percentage(self):
+        """
+            This function will calculate the cluster nodes usage coming from only those nodes hosting containers (active nodes)
+            Objective is to maximize utilziation
+            """
+        
+        host_resources_usage = []
+        containers_usage = self.containers_resources_usage
+
+        for host in range(self.num_hosts):
+            container_in_host = np.where(self.containers_hosts == host)[0]
+            if len(container_in_host) > 0:
+                host_resources = sum(containers_usage[container_in_host])
+                host_resources += self.hosts_resources_req_yolo[host]
+                usage_ratio = host_resources/self.hosts_resources_alloc[host][1:]
+                host_resources_usage.append(usage_ratio)
+        
+        hosts_stack = np.vstack(host_resources_usage)
+
+        return np.mean(hosts_stack, axis=0)
+    
+    @property
+    def conserved_resources(self):
+        """
+            This function will calculate the cluster nodes usage coming from only those nodes hosting containers (active nodes)
+            Objective is to maximize utilziation
+            """
+        
+        host_resources_free = []
+
+        for host in range(self.num_hosts):
+            container_in_host = np.where(self.containers_hosts == host)[0]
+            if len(container_in_host) < 1:
+                host_resources = self.hosts_resources_cap[host][1:]
+                host_resources_free.append(host_resources)
+
+        if len(host_resources_free) == 0:
+            return np.array([0,0])
+        
+        hosts_stack = np.vstack(host_resources_free)
+
+        hosts_stack[:, 0] = hosts_stack[:, 0] / 1000  # First column division
+        hosts_stack[:, 1] = hosts_stack[:, 1] / 1024  # Second column division
+
+        return np.sum(hosts_stack, axis=0)
+    
+    @property
+    def oversubscribed_cores(self):
+
+        """Only CPU oversubscripton, MEM can be fatal with OOM error!
+            coming from the active nodes only!
+        """
+
+        host_resources_oversub = []
+
+        for host in range(self.num_hosts):
+            container_in_host = np.where(self.containers_hosts == host)[0]
+            if len(container_in_host) > 0:
+                host_resources_request = sum(self.containers_request[container_in_host][:, 1])
+                host_resources_request += self.hosts_resources_req_yolo[host][0]
+                host_resources_request = host_resources_request/self.hosts_resources_alloc[host][1]
+                host_resources_oversub.append(host_resources_request)
+
+        if len(host_resources_oversub) == 0:
+            return 0
+        
+        return np.mean(host_resources_oversub)
+    
+    
+    def yolo_sla(self, sample_indices:List[int], yoloindices: List[int]):
+        sla_list = []
+
+        for container in range(self.num_containers):
+            delay_col = self.yolodata[yoloindices[container]][sample_indices,-1]
+            count = np.sum(delay_col > 0.8)
+            svr = count/self.yolo_sample_count
+            sla_list.append(svr)
+
+        return np.array(sla_list)
+
+    @property
+    def hosts_resources_requested_sim(self):
         """return the amount of resource requested
         on each node by the containers
         """
         hosts_resources_request = []
         for host in range(self.num_hosts):
             container_in_host = np.where(self.containers_hosts == host)[0]
-            host_resources_usage = sum(self.containers_resources_request[container_in_host][:, 1:])
-            if type(host_resources_usage) != np.ndarray:
-                host_resources_usage = np.zeros(self.num_resources)
+            host_resources_usage = sum(self.containers_request[container_in_host][:, 1:])
+            host_resources_usage += self.hosts_resources_req_yolo[host]
+            #if type(host_resources_usage) != np.ndarray:
+            #    host_resources_usage = np.zeros(self.num_resources)
             hosts_resources_request.append(host_resources_usage)
         return np.array(hosts_resources_request)
     
     @property
+    def num_overloaded(self) -> int:
+        overloaded_nodes = np.unique(np.where(
+            self.hosts_resources_usage_frac > 0.85)[0])
+        return len(overloaded_nodes)
+    
+    @property
+    def hosts_resources_usage_frac(self):
+        """returns the resource requested on
+        each node
+                     ram - cpu
+                    |         |
+            nodes   |         |
+                    |         |
+
+            range:
+                row inidices: (0, num_nodes]
+                columns indices: (0, num_resources]
+                enteries: [0, 1] type: float
+        """
+        return self.hosts_resources_usages / self.hosts_resources_alloc[:, 1:]
+    
+    def consolidations(self, services_hosts) -> int:
+        """functional version of num_services
+        returns the number of consolidated nodes
+        """
+        a = set(services_hosts)
+        b = set(np.arange(self.num_hosts))
+        intersect = b - a
+        return len(intersect)
+    
+    @property
+    def num_consolidated(self):
+        return self.consolidations(self.containers_hosts)
+
+    def dict_sorter(self, config: Dict[str, Any]):
+        
+        sorted_dict = dict(sorted(config.items(), key=lambda item: int(item[0])))
+
+        return sorted_dict
+
+    ##############################        YOLO Functions      #####################################
+    @property
     def yolo_active_accuracies(self):
 
         """
-        it should return a numpy arrry of active models accuracies
+        it should return a numpy arrry of accuracies from the sampled yolo data
         """
         return np.array([self.yolo_accuracies[model] for model in self.containers_model])
+    
+    @property
+    def yolo_sample_accuracies(self):
+
+        #self.yolo_sample_usage
+        accuracy_list = []
+        for id, val in enumerate(self.yolo_sample_usage):
+            accuracy_list.append(val[-2])
+        return np.array(accuracy_list)
+    
+    def mean_yolo_sample_usages(self, sample_indices:List[int], yoloindices: List[int]):
+        sample_yolo_local = []
+
+        for id in range(self.num_containers):
+            selected_rows = self.yolodata[yoloindices[id]][sample_indices,:]
+            mean_values = np.mean(selected_rows, axis=0)
+            sample_yolo_local.append(mean_values)
+
+        self.yolo_sample_usage = sample_yolo_local
+
+        return self.yolo_sample_usage
+
 
     def yolo_reading(self, path):
 

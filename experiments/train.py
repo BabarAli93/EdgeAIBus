@@ -6,6 +6,9 @@ from copy import deepcopy
 import sys
 import ray
 from ray import tune
+from ray.rllib.algorithms.impala import ImpalaConfig
+from ray.air import CheckpointConfig, RunConfig
+from utils import CustomCallbacks
 #from scheduler.Scheduler import Scheduler
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -16,27 +19,55 @@ from utils.constants import (
     CONFIGS_PATH,
     SCHEDULER_PATH,
     TRAIN_RESULTS_PATH,
-    DATASETS_PATH
+    DATASETS_PATH,
+    RAY_LOGS_PATH
 )
 from utils.class_builder import make_env_class
+
+# def impala_builder(env_class, env_config, use_callback:bool):
+#     config = ImpalaConfig()
+
+#     if use_callback:
+#         config.callbacks(CustomCallbacks)
+    
+#     config = (
+#         config
+#         .environment(env=env_class, env_config=env_config)
+#         .training(vtrace=True, vtrace_clip_rho_threshold=2, vtrace_clip_pg_rho_threshold=2,
+#                   gamma=0.95,
+#                   lr=0.0001,
+#                   model={"fcnet_hiddens": [128, 128], "fcnet_activation": "linear", "vf_share_layers": "true"},
+#                   train_batch_size=512,
+#                   vf_loss_coeff=0.01,
+#                   replay_proportion=0.3,
+#                   replay_buffer_num_slots=300,
+#                   train_batch_size_per_learner=256
+#                   )
+#         .debugging(log_level="INFO")
+#         .resources(num_gpus=0)
+#         .env_runners(num_env_runners=3)
+#         #.rollouts(num_rollout_workers=2)
+#     )
+#     config.seed = 203
+#     config.buffer_size = 2048
+
+#     return config.to_dict()
 
 def training(config_file, type_env, use_callback, checkpoint_freq):
     generator_config = deepcopy(config_file)
     del generator_config['notes']
     bitbrains_path = os.path.join(DATASETS_PATH, "bitbrains/rnd")
     yolo_path = os.path.join(DATASETS_PATH, "yolo")
+    stop = config_file['stop']
+    run_or_experiment = config_file['run_or_experiment']
 
-    generator_config.update({
-        'type_env': type_env, 
-        'use_callback': use_callback,
-        'checkpoint_freq': checkpoint_freq
-    })
-
+    generator_config.update({'type_env': type_env})
     datacenter = DatacenterGeneration(generator_config)
     #scheduler = Scheduler() 
 
     env_config = generator_config['env_config_base']
     env_config.update({
+        #"train": True,
         'datacenter': datacenter,
         'datasets': {
             'bitbrains_path': bitbrains_path,
@@ -45,22 +76,41 @@ def training(config_file, type_env, use_callback, checkpoint_freq):
         'scheduler_path': SCHEDULER_PATH
     })
 
-    if type_env not in ['CartPole-v0', 'Pendulum-v0']:
-        ray_config = {"env": make_env_class(type_env),
-                    "env_config": env_config}
-    else:
-        ray_config = {"env": type_env}
+    # if type_env not in ['CartPole-v0', 'Pendulum-v0']:
+    #     ray_config = {"env": make_env_class(type_env),
+    #                 "env_config": env_config}
+    # else:
+    #     ray_config = {"env": type_env}
 
-    learn_config = generator_config['learn_config']
-    ray_config.update(learn_config)
+    # if run_or_experiment == 'IMPALA':
+    #     learn_config = impala_builder(ray_config['env'], env_config, use_callback)
     
-    print(ray_config)
+    learn_config = generator_config['learn_config']
+    learn_config.update({
+        "env": make_env_class(type_env),
+        "env_config": env_config
+    })
+    if use_callback: 
+        learn_config.update({
+            "callbacks": CustomCallbacks
+
+        })
     
     ray.init(local_mode=True)
 
-    _ = tune.run(config=ray_config,
-                 run_or_experiment="IMPALA",
-                 resume=False)
+    tuner = tune.Tuner(
+        run_or_experiment,
+        run_config=RunConfig(stop=stop,
+                             storage_path=RAY_LOGS_PATH,
+                             verbose=1,
+                             checkpoint_config=CheckpointConfig(
+                                 num_to_keep=5,
+                                 checkpoint_frequency=100,
+                                 checkpoint_at_end=True,
+                             )
+                             ),
+        param_space=learn_config,
+    ).fit()
 
     return None
 

@@ -30,6 +30,7 @@ class Preprocessor():
             "containers_usage": self._services_request_normalizer,
             "containers_accuracy": self._percentage_normalizer,
             "containers_hosts": self._one_hot_containers_nodes,
+            "sla_violations":self._none
         }
         for key, val in observation.items():
             obs = np.concatenate((obs, transformers.get(
