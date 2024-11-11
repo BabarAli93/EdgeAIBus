@@ -5,6 +5,9 @@ import re
 import pandas as pd
 import sys
 import os
+import time
+import csv
+
 from kubeframework.utils.kube_utils.multi_cluster import MultiCluster
 from .Deployment import *
 from kubeframework.utils.kube_utils.utils import (
@@ -80,9 +83,10 @@ class DatacenterGeneration:
         else:
             self.kube = True
 
-        self.cpu_core_count = {2: 0, 4: 0, 6: 0} # keeping conut of each core for predictions
+        self.cpu_core_count = {2: 0} # keeping conut of each core for predictions
         self.containers_request = np.full((self.num_containers, 3), -1)
-        self.containers_model = np.ones(self.num_containers, dtype=int)
+        #self.containers_model = np.ones(self.num_containers, dtype=int)
+        self.containers_model = np.random.randint(2, size=self.num_containers)
         self.containers_usages =  np.full((self.num_containers, 2), -1)
         self.hosts_resources_util = np.full((self.num_hosts, 3), -1.0) # request based usage
         self.hosts_resources_usage = np.full((self.num_hosts, 2), -1)  # actual usage based on Yolo
@@ -94,7 +98,44 @@ class DatacenterGeneration:
             self.hosts_resources_alloc = np.full((self.num_hosts, 3), -1)
             self.hosts_resources_remain = np.full((self.num_hosts, 3), -1)
             self.hosts_resources_req = np.full((self.num_hosts, 3), -1)
+            self.sla_violation = np.zeros(self.num_containers, dtype=float)
 
+            self.images = config['images']
+            self.versions = config['versions']
+
+            assert len(self.images) == len(self.versions), \
+                "There can be one version for one image. Please provide correct lists"
+            
+            self.model_image = dict(zip(self.versions, self.images))
+            self.pulled = False
+            self.hosts_pull = False
+            self.containers_pull = False
+            self.yolosla_processed = False
+            self.locations = []
+            self.port = 5000
+            self.containers_locations = list()
+            self.host_capacity_list = []
+            self.hosts_remaining_list = []
+            self.host_alloc_list = []
+            self.hosts_requested_list = []
+            # generating random list of stings for GKE Scheduler to count the migration
+            self.gke_node_name = [chr(ord('A') + i) for i in range(self.num_containers)]
+            self.num_containers_types = config['nums']['container_types']  ## There are One type of containers at the moment
+        
+            # using this to contianer container's changing string details
+            self.containers_ips = []
+            self.containers_versions = []
+            self.containers_images = []
+
+            ## make use of contexts here
+            self.contexts = config['contexts']
+            self.config_path = config['config_path']
+            _, self.hosts_resources_req_yolo = self.hosts_resources_requested_init(self.hosts_cap_rng)
+
+            _ = self.generateCluster()  # TODO: check what it returns
+
+            _, _ = self.randomDeployment() # TODO: check all the data structures are compatible to the simulatuion
+            # TODO: break if number of nodes in GKE and the provided configurations are not same
         elif self.simulation:
             
             self.containers_request = self.containers_requests()
@@ -108,41 +149,7 @@ class DatacenterGeneration:
             
             _ = self.randomDeployment()
             
-        self.images = config['images']
-        self.versions = config['versions']
-
-        assert len(self.images) == len(self.versions), \
-              "There can be one version for one image. Please provide correct lists"
-        
-        self.model_image = dict(zip(self.versions, self.images))
-        self.pulled = False
         self.cost = 0
-        self.locations = []
-        self.port = 5000
-        self.containers_locations = list()
-
-        self.host_capacity_list = []
-        self.hosts_remaining_list = []
-        self.host_alloc_list = []
-        self.hosts_requested_list = []
-        # generating random list of stings for GKE Scheduler to count the migration
-        self.gke_node_name = [chr(ord('A') + i) for i in range(self.num_containers)]
-        self.num_containers_types = config['nums']['container_types']  ## There are One type of containers at the moment
-
-        ## Need to get Containers and Hosts capacities
-        #self.datacenter_start_time = config['datacenter_start_time']
-        #self.datacenter_end_time = config['datacenter_end_time']
-        #assert self.datacenter_end_time - self.datacenter_start_time > 0
-        #self.num_steps = config['num_steps']
-        
-        # using this to contianer container's changing string details
-        self.containers_ips = []
-        self.containers_versions = []
-        self.containers_images = []
-
-        ## make use of contexts here
-        self.contexts = config['contexts']
-        self.config_path = config['config_path']
 
         np.set_printoptions(suppress=True, precision=3)
 
@@ -162,18 +169,20 @@ class DatacenterGeneration:
         # it will get us a LIST of V1 Nodes
         self.nodes_collection = clusters_object.get_nodes_all(self.cluster_collection)
         
+        assert len(self.nodes_collection) == self.num_hosts == len(self.hosts_cap_rng), \
+            'Number of hosts in real testbed is not equal to ones in provided datacenter! Equate num_hosts, hosts_cap_rng to GKE nodes'
         
         # we are creating hosts capacities, allocatables and remaining resources arrays
         # order: 1. capcities/ alloc, 2. requested 3. reamining
         self.host_capacity_list.append(pd.DataFrame(self.hosts_resources_capacities()))
         self.host_alloc_list.append(pd.DataFrame(self.hosts_resources_allocatable()))
-        self.containers_requests() # this function is used to generate containers requests
+        self.containers_requests_v2() # this function is used to generate containers requests
 
         # it extracts locations from context string
         for context in self.contexts:
             parts = context.split('_')
             for part in parts:
-                if part.startswith('us-central') and '-' in part:
+                if part.startswith('europe-') or part.startswith('us-'):
                     self.locations.append(part)
                     break
 
@@ -202,11 +211,12 @@ class DatacenterGeneration:
 
         self.kube_nodes = np.array([node for node in kube_nodes])
 
-        hosts_requests_local, _ = self.hosts_resources_requested()
+        hosts_requests_local = self.hosts_resources_requested()
         self.hosts_requested_list.append(pd.DataFrame(hosts_requests_local))
         self.hosts_remaining_list.append(pd.DataFrame(self.hosts_resources_remaining()))
         self.hosts_resources_util[:, 0] = self.hosts_resources_alloc[:, 0]
         self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req[:,1:]/self.hosts_resources_alloc[:, 1:])*100
+        self.hosts_resources_usage = self.hosts_resources_usage_gke
         
         return self.cluster_collection, self.clusters
 
@@ -338,25 +348,18 @@ class DatacenterGeneration:
         self.services = list()
         for service_id, node in enumerate(self.containers_hosts_obj):
             if prev_decision[service_id] != self.containers_hosts_tuple[service_id]:
-                    
+                # TODO: self.containers_model use it to select model image    
                 name = generate_random_service_name(service_id=service_id, node_id=node.id)
-                if self.containers_request[service_id][1] > 99 and self.containers_request[service_id][1] <= 999 :
-                    image=self.images[0]
-                    version=self.versions[0]
-                elif self.containers_request[service_id][1] > 999 and self.containers_request[service_id][1] < 1999:
-                    image=self.images[1]
-                    version=self.versions[1]
-                else:
-                    image=self.images[2]
-                    version=self.versions[2]
-                pod = construct_pod(name=name, image=image,  ## need to handle possible error of unequal containers and images
-                                    limit_cpu=f"{self.containers_request[service_id][1]}m",
-                                    limit_mem=f"{self.containers_request[service_id][2]}Mi")
-                
+                image = self.images[self.containers_model[service_id]]
+                version = self.versions[self.containers_model[service_id]]
                 # pod = construct_pod(name=name, image=image,  ## need to handle possible error of unequal containers and images
                 #                     limit_cpu=f"{self.containers_request[service_id][1]}m",
-                #                     limit_mem=f"{self.containers_request[service_id][2]}Mi",
-                #                     node_name=node.name)
+                #                     limit_mem=f"{self.containers_request[service_id][2]}Mi")
+                
+                pod = construct_pod(name=name, image=image,  ## need to handle possible error of unequal containers and images
+                                    limit_cpu=f"{self.containers_request[service_id][1]}m",
+                                    limit_mem=f"{self.containers_request[service_id][2]}Mi",
+                                    node_name=node.name)
                         
                 svc = construct_service(name=name, port=self.port, targetPort=self.port)
 
@@ -376,12 +379,16 @@ class DatacenterGeneration:
         return self.ip_model_image
 
     ## write migration function
-    def migrate(self, prev_decision, prev_containers_hosts_obj): 
-
+    def migrate(self, gke_action: np.array): 
+        # self.containers_hosts_obj => it has KubeNodes objects not the V1Node
         self.containers_hosts_obj = self.kube_nodes[self.containers_hosts]
 
         for idx, (service, node) in enumerate(zip(self.services, self.containers_hosts_obj)):
-            if (prev_decision[idx] != self.containers_hosts_tuple[idx]) or (service.model != self.ip_model_image[idx][1]):
+            if (gke_action[idx]==1):
+
+                image = self.images[self.containers_model[idx]]
+                version = self.versions[self.containers_model[idx]]
+
                 limits = {'memory': f"{self.containers_request[idx][2]}Mi", 
                           'cpu': f"{self.containers_request[idx][1]}m"
                           }
@@ -391,8 +398,8 @@ class DatacenterGeneration:
                     to_node_name=node.name,
                     to_node_id=node.id,
                     limits = limits,
-                    src_context=prev_containers_hosts_obj[idx].context,
-                    target_image = self.ip_model_image[idx][2]
+                    src_context=self.containers_hosts_obj[idx].context,
+                    target_image = image
                 )
   
                 if pod is None:
@@ -402,13 +409,10 @@ class DatacenterGeneration:
                     raise ValueError('svc should not be None')
 
                 # create a service for new Pod
-                service = KubeService(service.id, pod, svc, self.ip_model_image[idx][1])
+                service = KubeService(service.id, pod, svc, version)
 
                 self.services[idx] = service
-                #self.containers_ips[idx] = service_ip
-                temp_tuple = self.ip_model_image[idx]
-                modified_tuple = (service_ip, temp_tuple[1], temp_tuple[2])
-                self.ip_model_image[idx] = modified_tuple
+                self.ip_model_image[idx] = (service_ip, version, image)
                 self.containers_locations[idx] = node.location
 
 
@@ -421,11 +425,8 @@ class DatacenterGeneration:
         self.hosts_remaining_list.append(df_hosts_remaining)
         self.hosts_requested_list.append(df_hosts_requested)
 
-        cost = np.sum(self.containers_request[:,1]/1000)
-        num_migrations = sum(1 for prev, new in zip(prev_decision, self.containers_hosts_tuple) if prev[0] != new[0])
-        #num_scalings = sum(1 for prev, new in zip(prev_decision, self.containers_hosts_tuple) if prev[1] != new[1])
 
-        return self.ip_model_image, num_migrations, cost
+        return self.ip_model_image
     
     ## write migration function
     def gkems_migrate(self, prev_decision, prev_containers_hosts_obj): 
@@ -465,7 +466,7 @@ class DatacenterGeneration:
             
         host_capacity = self.hosts_resources_capacities()
         host_alloc = self.hosts_resources_allocatable()
-        hosts_requested, cost = self.hosts_resources_requested()
+        hosts_requested = self.hosts_resources_requested()
         hosts_remaining = self.hosts_resources_remaining()
 
         df_host_capacity = pd.DataFrame(host_capacity)
@@ -536,17 +537,40 @@ class DatacenterGeneration:
             self.containers_request[id] = [id, cpu, memory]
 
         return self.containers_request
+    
+    def containers_requests_v2(self):
+
+        # we have created both array and lists of hosts and containers features
+        # | Container ID | Container CPU | Container RAM |
+        # (Container ID, Container CPU, Container RAM)
+
+        # For nodes, we have capacities and Allocatable functions
+
+        for id, value in self.container_conf.items():
+            cpu = value['cpu']['max']
+            memory = value['ram']['max']
+            id = int(id)
+
+            self.containers_request[id] = [id, cpu, memory]
+
+        return self.containers_request
 
 
     def hosts_resources_capacities(self):
 
-        assert len(self.nodes_collection) == self.num_hosts, 'Number of hosts in real testbed is not equal to ones in Datacenter'
         
         for i, node in enumerate(self.nodes_collection):
             cpu_mem_cap_dict = get_node_capacity(node)
             self.hosts_resources_cap[i,0] = i
-            self.hosts_resources_cap[i,1] = cpu_mem_cap_dict['cpu']
+            self.hosts_resources_cap[i,1] = int(cpu_mem_cap_dict['cpu'])
             self.hosts_resources_cap[i,2] = round((int(cpu_mem_cap_dict['memory'][:-2])) / (1000 ** 2))
+            
+            if int(cpu_mem_cap_dict['cpu']) in self.cpu_core_count:
+                self.cpu_core_count[int(cpu_mem_cap_dict['cpu'])] +=1
+
+        #unique_counts = set(self.cpu_core_count.values())
+        #assert len(unique_counts) == 1, "Provide same number of machines for each core."
+        self.core_repeator = max(list(self.cpu_core_count.values()))
         
         return self.hosts_resources_cap
     
@@ -645,7 +669,7 @@ class DatacenterGeneration:
         if not self.pulled:
             
             for i, node in enumerate(self.nodes_collection):
-                total_cpu_requests_prokube = 0
+                total_cpu_requests_edgeaibus = 0
                 #total_mem_requests_prokube = 0
                 total_cpu_requests = 0
                 total_memory_requests = 0
@@ -667,8 +691,8 @@ class DatacenterGeneration:
                                         else:
                                             cpu_value = int(cpu_request)*1000
                                         total_cpu_requests += cpu_value
-                                        if pod.metadata.namespace == 'prokube':
-                                            total_cpu_requests_prokube += cpu_value
+                                        if pod.metadata.namespace == 'EdgeAIBus':
+                                            total_cpu_requests_edgeaibus += cpu_value
 
                                         memory_request = container.resources.requests.get('memory')
                                         if memory_request:
@@ -684,13 +708,13 @@ class DatacenterGeneration:
                         total_memory_requests = total_memory_requests + 40 # adding a bound on safe side after examining oN GKE Dashboard (893 vs 857)
                         print(f"Requested Resources of {node_name}: CPU: {total_cpu_requests}, Memory: {total_memory_requests}")     
                 self.hosts_resources_req[i] = [i, total_cpu_requests, total_memory_requests]
-                print(f'Node: {i}, Container CPU: {total_cpu_requests_prokube}')
-                cost += total_cpu_requests_prokube
+                print(f'Node: {i}, Container CPU: {total_cpu_requests_edgeaibus}')
+                cost += total_cpu_requests_edgeaibus
 
             self.pulled = False
-            return self.hosts_resources_req, cost/1000
+            return self.hosts_resources_req
         else:
-            return self.hosts_resources_req, cost/1000
+            return self.hosts_resources_req
         
 
     def hosts_resources_requested_init(self, hosts_cap_rng):
@@ -712,6 +736,18 @@ class DatacenterGeneration:
         
         # TODO: Create an array of profiled CPU and Memory requested which will be used for actual usage
         return hosts_resources_req.astype(int), hosts_resources_req_yolo.astype(int)
+    
+    @property
+    def hosts_resources_usage_gke(self):
+        
+        if not self.hosts_pull:
+            
+            hosts_resources_usage = self.clusters[0]['cluster_obj'].monitor.get_nodes_metrics_top(self.nodes_collection)
+            self.hosts_resources_usage = np.array(hosts_resources_usage)
+            self.hosts_pull = True
+            return self.hosts_resources_usage
+        else:
+            return self.hosts_resources_usage
 
 
     @property
@@ -740,9 +776,6 @@ class DatacenterGeneration:
     def hosted_containers_ids(self, host_id):
         # it will return an array of containers hosted inside in a given host
         return np.where(self.containers_hosts == host_id)[0]
-
-    def cluster_generation(self):
-        return 0
 
     # @property
     # def containers_resources_usage(self):
@@ -793,6 +826,24 @@ class DatacenterGeneration:
         return self.containers_usages
     
     @property
+    def containers_resources_usage_gke(self):
+
+        if not self.containers_pull:
+            pods_list = []
+            containers_ids = set(self.containers_request[:,0])
+            for container_id in containers_ids:
+                if self.services[container_id].id in containers_ids:
+                    pod = self.services[container_id].pod
+                    pods_list.append(pod)
+
+            pods_usage = self.clusters[0]['cluster_obj'].monitor.get_pods_metrics_top(pods_list)
+            self.containers_usages = np.array(pods_usage)
+            self.containers_pull = True
+            return self.containers_usages
+        else:
+            return self.containers_usages
+    
+    @property
     def hosts_resources_usages(self):
 
         """
@@ -811,6 +862,15 @@ class DatacenterGeneration:
         
         self.hosts_resources_usage = np.array(host_resources_usage)
         return self.hosts_resources_usage
+    
+    @property
+    def cluster_mean_usage_percentage_gke(self):
+        # get the active nodes list
+        active_nodes_ids = sorted(set(np.unique(self.containers_hosts)))
+        active_nodes = [self.nodes_collection[node_id] for node_id in active_nodes_ids]
+        resource_usage = self.clusters[0]['cluster_obj'].monitor.get_nodes_metrics_top(active_nodes)
+        resource_usage = np.array(resource_usage)
+        return  np.mean(resource_usage, axis=0)
     
     @property
     def cluster_mean_usage_percentage(self):
@@ -853,11 +913,12 @@ class DatacenterGeneration:
             return np.array([0,0])
         
         hosts_stack = np.vstack(host_resources_free)
-
-        hosts_stack[:, 0] = hosts_stack[:, 0] / 1000  # First column division
-        hosts_stack[:, 1] = hosts_stack[:, 1] / 1024  # Second column division
-
-        return np.sum(hosts_stack, axis=0)
+        if self.kube:
+            return np.sum(hosts_stack, axis=0)
+        elif self.simulation:
+            hosts_stack[:, 0] = hosts_stack[:, 0] / 1000  # First column division
+            hosts_stack[:, 1] = hosts_stack[:, 1] / 1024  # Second column division
+            return np.sum(hosts_stack, axis=0)
     
     @property
     def oversubscribed_cores(self):
@@ -887,12 +948,35 @@ class DatacenterGeneration:
 
         for container in range(self.num_containers):
             delay_col = self.yolodata[yoloindices[container]][sample_indices,-1]
-            count = np.sum(delay_col > 0.8)
+            count = np.sum(delay_col > 0.8)                                 ## 800 milliseconds SLA bound
             svr = count/self.yolo_sample_count
             sla_list.append(svr)
 
         return np.array(sla_list)
+    
+    def yolo_sla_gke(self, user_traffic: None):
+        # TODO write the logic to calculalte SLA for each container and return numpy array
 
+        if not self.yolosla_processed:
+            if user_traffic is None:
+                print('No Yolo public traffic received!!')
+                return np.zeros(self.num_containers, dtype=float)
+            else: 
+                for container_id in range(len(self.sla_violation)):
+                    #sla_violation[container_id] = np.sum((user_traffic[:, 0] == container_id) & (user_traffic[:, -1] > 0.8))
+                    total_count = np.sum(user_traffic[:, 0] == container_id)
+                    violations_count = np.sum((user_traffic[:, 0] == container_id) & (user_traffic[:, -1] > 0.8))
+                    self.sla_violation[container_id] = violations_count / total_count
+
+                self.yolosla_processed = True
+                return self.sla_violation
+
+        else:
+            return self.sla_violation 
+
+        
+
+        
     @property
     def hosts_resources_requested_sim(self):
         """return the amount of resource requested
@@ -909,9 +993,27 @@ class DatacenterGeneration:
         return np.array(hosts_resources_request)
     
     @property
+    def hosts_resources_requested_gke(self):
+        # utilizes management requested resouces and the contaiener's request managed locally for overload handling 
+        hosts_resources_request = []
+        for host in range(self.num_hosts):
+            container_in_host = np.where(self.containers_hosts == host)[0]
+            host_resources_usage = sum(self.containers_request[container_in_host][:, 1:])
+            host_resources_usage += self.hosts_resources_req_yolo[host]
+            #if type(host_resources_usage) != np.ndarray:
+            #    host_resources_usage = np.zeros(self.num_resources)
+            hosts_resources_request.append(host_resources_usage)
+        return np.array(hosts_resources_request)
+    
+    @property
     def num_overloaded(self) -> int:
-        overloaded_nodes = np.unique(np.where(
-            self.hosts_resources_usage_frac > 0.85)[0])
+        if self.simulation:
+            overloaded_nodes = np.unique(np.where(
+                self.hosts_resources_usage_frac > 0.85)[0])
+        elif self.kube:
+            # TODO: check overloading for requested resources to avoid OOM and OOC errors
+            overloaded_nodes = np.unique(np.where(
+                self.hosts_resources_usage_frac_gke > 1)[0])
         return len(overloaded_nodes)
     
     @property
@@ -929,6 +1031,22 @@ class DatacenterGeneration:
                 enteries: [0, 1] type: float
         """
         return self.hosts_resources_usages / self.hosts_resources_alloc[:, 1:]
+    
+    @property
+    def hosts_resources_usage_frac_gke(self):
+        """returns the resource requested on
+        each node
+                     ram - cpu
+                    |         |
+            nodes   |         |
+                    |         |
+
+            range:
+                row inidices: (0, num_nodes]
+                columns indices: (0, num_resources]
+                enteries: [0, 1] type: float
+        """
+        return self.hosts_resources_requested_gke / self.hosts_resources_alloc[:, 1:]
     
     def consolidations(self, services_hosts) -> int:
         """functional version of num_services
@@ -1012,6 +1130,30 @@ class DatacenterGeneration:
         
         return self.yolodata
     
+    # TODO: function to read GKE results
+    # we will read this every interval or we can make a datastructure to hold everything in the memory, do the calculations and write once for all
+    
+
+    def generate_csv(self, path: str):
+        """ 
+        This function generates CSV file to log content if does not exist
+
+        """
+        fieldnames = ['time', 'cpu_request', 'memory_request', 'model', 'model_acc', 'processing_delay(s)']
+
+        base_name = 'clients_stats_edgeaibus.csv'
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+        client_file = f"{base_name[:-4]}_{timestamp}.csv"
+        client_path = os.path.join(path, client_file)
+
+        with open(client_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+        print('Client CSV created...')
+
+        return client_path
+
     def process_yolo(self, df):
         # Remove 'm' from CPU columns and convert to integer
         df = df.dropna()

@@ -24,34 +24,36 @@ from utils.constants import (
 )
 from utils.class_builder import make_env_class
 
-# def impala_builder(env_class, env_config, use_callback:bool):
-#     config = ImpalaConfig()
+def impala_builder(env_class, env_config, use_callback:bool):
+    config = ImpalaConfig()
 
-#     if use_callback:
-#         config.callbacks(CustomCallbacks)
+    if use_callback:
+        config.callbacks(CustomCallbacks)
     
-#     config = (
-#         config
-#         .environment(env=env_class, env_config=env_config)
-#         .training(vtrace=True, vtrace_clip_rho_threshold=2, vtrace_clip_pg_rho_threshold=2,
-#                   gamma=0.95,
-#                   lr=0.0001,
-#                   model={"fcnet_hiddens": [128, 128], "fcnet_activation": "linear", "vf_share_layers": "true"},
-#                   train_batch_size=512,
-#                   vf_loss_coeff=0.01,
-#                   replay_proportion=0.3,
-#                   replay_buffer_num_slots=300,
-#                   train_batch_size_per_learner=256
-#                   )
-#         .debugging(log_level="INFO")
-#         .resources(num_gpus=0)
-#         .env_runners(num_env_runners=3)
-#         #.rollouts(num_rollout_workers=2)
-#     )
-#     config.seed = 203
-#     config.buffer_size = 2048
+    config = (
+        config
+        .environment(env=env_class, env_config=env_config)
+        .training(vtrace=True, vtrace_clip_rho_threshold=2, vtrace_clip_pg_rho_threshold=2,
+                  gamma=0.95,
+                  lr=0.0001,
+                  model={"fcnet_hiddens": [128, 128], "fcnet_activation": "linear", "vf_share_layers": "true"},
+                  train_batch_size=512,
+                  vf_loss_coeff=0.01,
+                  replay_proportion=0.3,
+                  replay_buffer_num_slots=300,
+                  train_batch_size_per_learner=256,
+                  entropy_coeff=0.01,
+                  )
+        .debugging(log_level="INFO")
+        .rollouts(num_rollout_workers=2)
+        .resources(num_gpus=0)
+        .env_runners(num_env_runners=3)
+        #.rollouts(num_rollout_workers=2)
+    )
+    config.seed = 203
+    config.buffer_size = 2048
 
-#     return config.to_dict()
+    return config.to_dict()
 
 def training(config_file, type_env, use_callback, checkpoint_freq):
     generator_config = deepcopy(config_file)
@@ -76,25 +78,22 @@ def training(config_file, type_env, use_callback, checkpoint_freq):
         'scheduler_path': SCHEDULER_PATH
     })
 
-    # if type_env not in ['CartPole-v0', 'Pendulum-v0']:
-    #     ray_config = {"env": make_env_class(type_env),
-    #                 "env_config": env_config}
-    # else:
-    #     ray_config = {"env": type_env}
+    ray_config = {"env": make_env_class(type_env), 
+                  "env_config": env_config}
 
-    # if run_or_experiment == 'IMPALA':
-    #     learn_config = impala_builder(ray_config['env'], env_config, use_callback)
+    if run_or_experiment == 'IMPALA':
+        learn_config = impala_builder(ray_config['env'], env_config, use_callback)
     
-    learn_config = generator_config['learn_config']
-    learn_config.update({
-        "env": make_env_class(type_env),
-        "env_config": env_config
-    })
-    if use_callback: 
-        learn_config.update({
-            "callbacks": CustomCallbacks
+    #learn_config = generator_config['learn_config']
+    # learn_config.update({
+    #     "env": make_env_class(type_env),
+    #     "env_config": env_config
+    # })
+    # if use_callback: 
+    #     learn_config.update({
+    #         "callbacks": CustomCallbacks
 
-        })
+    #     })
     
     ray.init(local_mode=True)
 

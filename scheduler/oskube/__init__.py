@@ -5,6 +5,11 @@ register(
     entry_point='scheduler.oskube.envs:SimEdgeEnv',
     max_episode_steps=20
 )
+
+register(
+    id='KubeEdgeEnv-v0',
+    entry_point='scheduler.oskube.envs:KubeEdgeEnv'
+)
 # register(
 #     id='SimBinpackingEnv-v0',
 #     entry_point='mobile_kube.envs:SimBinpackingEnv',

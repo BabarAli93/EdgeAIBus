@@ -19,10 +19,10 @@ from ray.rllib.algorithms.algorithm import Algorithm
 import pandas as pd
 from pprint import PrettyPrinter
 
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from datacenter.Datacenter import *
+from workload.Workload_v2 import *
 
 pp = PrettyPrinter(indent=4)
 # get an absolute path to the directory that contains parent files
@@ -41,10 +41,7 @@ def run_experiments(
     *, config_file, type_env: str, local_mode: bool,
     episode_length, num_episodes: int, checkpoint_to_load: str, 
     num_containers:int):
-    """
-    """
-
-
+    
     experiment_folder = os.path.join(TRAIN_RESULTS_PATH, 
                                "IMPALA_{}".format(num_containers))
 
@@ -59,7 +56,11 @@ def run_experiments(
     bitbrains_path = os.path.join(DATASETS_PATH, "bitbrains/rnd")
     yolo_path = os.path.join(DATASETS_PATH, "yolo")
     generator_config.update({'type_env': type_env})
+    
+    # SIMULATION/ GKE Testbeds successful creation  
+
     datacenter = DatacenterGeneration(generator_config)
+    workload = WorkloadGenerator()
     env_config = generator_config['env_config_base']
     env_config.update({
         "episode_length": episode_length,
@@ -68,11 +69,14 @@ def run_experiments(
             'bitbrains_path': bitbrains_path,
             'yolo_path': yolo_path
         },
-        'scheduler_path': SCHEDULER_PATH
+        'scheduler_path': SCHEDULER_PATH,
+        'overload_threshold': workload
     })
 
     learn_config = generator_config['learn_config']
     path_env = type_env if type_env != 'kube-edge' else 'sim-edge'
+    if type_env.startswith('kube'):
+        env_config.update({'no_action_on_overloaded': True})
     ray.init(local_mode=local_mode)
 
     items = os.listdir(experiment_folder)
@@ -87,7 +91,7 @@ def run_experiments(
     if type_env not in ['CartPole-v0', 'Pendulum-v0']:
         env = gym.make(ENVSMAP[type_env], config=env_config)
         # reset the env at the beginning of each episode
-        ray_config = {"env": make_env_class('sim-edge'),
+        ray_config = {"env": make_env_class(type_env),
                     "env_config": env_config}
         ray_config.update(learn_config)
     else:
@@ -128,12 +132,15 @@ def run_experiments(
         obs, info = env.reset()
         # print(f"observation: {env.env.raw_observation}")
         # start = time.time()
+        iter = 0
         while not done:
+            print(f'\n##################   Iteration {i}   #######################')
             action = agent.compute_single_action(obs)
             obs, reward, done, truncate, info = env.step(action)
             state = flatten(env.observation, action, reward, info)
             states.append(state)
             episode_reward += reward
+            iter += 1
         states = pd.DataFrame(states)
         print(f"episode reward: {episode_reward}")
         episodes.append(states)

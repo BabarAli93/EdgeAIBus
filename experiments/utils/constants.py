@@ -1,5 +1,5 @@
 import os
-from scheduler.oskube.envs import SimEdgeEnv
+from scheduler.oskube.envs import SimEdgeEnv, KubeEdgeEnv
 
 # dfined by the user
 
@@ -45,11 +45,13 @@ _create_dirs()
 
 ENVS = {
     'sim-edge': SimEdgeEnv,
+    'kube-edge': KubeEdgeEnv
     #'kube-scheduler': KubeSchedulerEnv,
 }
 #
 ENVSMAP = {
     'sim-edge': 'SimEdgeEnv-v0',
+    'kube-edge' : 'KubeEdgeEnv-v0'
 #     'sim-binpacking': 'SimBinpackingEnv-v0',
 #     'kube-scheduler': 'KubeSchedulerEnv-v0',
 #     'kube-binpacking': 'KubeBinpackingEnv-v0',

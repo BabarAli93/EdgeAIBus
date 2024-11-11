@@ -37,17 +37,13 @@ class WorkloadGenerator:
             e2e_delay = e_time - s_time
             server_client = json_response['serverclientprop']
             server_side_prop = current_time - server_client # we should not cosider images saving time in propagation time calculations
-            process_time = json_response['proc_time'] * 1000
+            process_time = json_response['proc_time']
             client_side_prop = json_response['clientsideprop']
             prop_time = client_side_prop + server_side_prop
 
             return {
-            'Time': time.time(),
-            'Model Name': 'yolov5n',
-            'File Name': item,
-            'Propagation Delay (s)': prop_time,
-            'Processing Delay (ms)': process_time,
-            'E2E Delay (s)': e2e_delay
+            'time': time.time(),
+            'processing_delay(s)': process_time
         }
         else:
             print('Unsuccessful response!')

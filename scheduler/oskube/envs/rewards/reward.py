@@ -97,7 +97,10 @@ def rescale(values, old_min = 0, old_max = 1, new_min = 0, new_max = 100):
 
 def reward_energy(self):
     # Aggregate actual CPU usage across all hosts
-    total_actual_usage = np.sum(self.datacenter.hosts_resources_usages[:,0])
+    if self.datacenter.kube:
+        total_actual_usage = np.sum(self.datacenter.hosts_resources_usage_gke[:,0])
+    elif self.datacenter.simulation:
+        total_actual_usage = np.sum(self.datacenter.hosts_resources_usages[:,0])
     total_available_cores = np.sum(self.datacenter.hosts_resources_alloc)
 
     # Average utilization of the entire datacenter
@@ -121,7 +124,7 @@ def reward_energy(self):
         new_max=1)[0]
 
     # Weight both average actual usage and consolidation in the final energy reward
-    usage_weight = 0.6  # Prioritize high actual usage
+    usage_weight = 0.6 # Prioritize high actual usage
     consolidation_weight = 0.4  # Still reward consolidation
 
     reward = self.penalty_consolidation * (

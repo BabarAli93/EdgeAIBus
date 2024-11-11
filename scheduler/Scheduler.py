@@ -208,3 +208,17 @@ class Scheduler:
         indices = np.where((cpu_model_array[:, None] == mapper).all(-1))[1]
 
         return indices
+    
+    @property
+    def pred_repeat_handler(self):
+        
+        modified_preds = []
+
+        for core, core_quantity in self.datacenter.cpu_core_count.items():
+            start_idx = (core // 2 -1 ) * self.prediction_length
+            end_idx = start_idx + self.prediction_length
+            core_preds = self.patch_np_preds[self.global_timesteps][start_idx:end_idx]
+
+            modified_preds.extend(np.tile(core_preds, core_quantity))
+
+        return np.array(modified_preds)

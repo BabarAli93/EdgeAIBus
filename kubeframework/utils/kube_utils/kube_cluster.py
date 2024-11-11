@@ -295,7 +295,7 @@ class Monitor(BaseFunctionalities):
             logger.error(e)
         return None
 
-    def get_pod_metrics_top(self, pod_name: str, namespace: str = None):
+    def get_pod_metrics_top(self, pod: V1Pod, namespace: str = None):
 
         """This function is an extension of get_pod_metrics()
         it does processing on extracted results to present like 'kubectl top' """
@@ -304,18 +304,32 @@ class Monitor(BaseFunctionalities):
 
         try:
             container_usage = self.obj_api.get_namespaced_custom_object('metrics.k8s.io', 'v1beta1', namespace, 'pods',
-                                                             pod_name).get('containers').pop().get('usage')
+                                                             pod.metadata.name).get('containers').pop().get('usage')
             cpu_usage_nano = int(container_usage['cpu'][:-1])  # Remove the 'n' suffix
             memory_usage_kib = int(container_usage['memory'][:-2])  # Remove the 'Ki' suffix
 
-            cpu_usage_mili = str(int(round(cpu_usage_nano / 1000000))) + 'm'
+            #cpu_usage_mili = str(int(round(cpu_usage_nano / 1000000))) + 'm'
+            #memory_usage_mib = str(int(round(memory_usage_kib / 1024,0))) + 'Mi'
 
-            memory_usage_mib = str(int(round(memory_usage_kib / 1024,0))) + 'Mi'
+            cpu_usage_mili = int(round(cpu_usage_nano / 1000000))
 
-            return cpu_usage_mili, memory_usage_mib
+            memory_usage_mib = int(round(memory_usage_kib / 1024,0))
+
+            return [cpu_usage_mili, memory_usage_mib]
 
         except ApiException as e:
             logger.error(e)
+        return None
+    
+    def get_pods_metrics_top(self, pods: List[V1Pod]):
+
+        pods_metrics = [self.get_pod_metrics_top(pod=pod) for pod in pods]
+
+        try:
+            return pods_metrics
+        except ApiException as e:
+            logger.error(e)
+
         return None
     
     def get_pod_resource_requests(self, pod_name: str, namespace: str = None):
@@ -373,8 +387,19 @@ class Monitor(BaseFunctionalities):
             logger.error(e)
 
         return None
+    
+    def get_nodes_metrics_top(self, nodes: List[V1Node]):
 
-    def get_node_metrics_top(self, node_name: str):
+        nodes_usage = [self.get_node_metrics_top(node=node) for node in nodes]
+
+        try:
+            return nodes_usage
+        except ApiException as e:
+            logger.error(e)
+
+        return None
+
+    def get_node_metrics_top(self, node: V1Node):
 
         """Get Node Metrics
 
@@ -385,15 +410,15 @@ class Monitor(BaseFunctionalities):
 
             node_usage = self.obj_api.get_cluster_custom_object(
                 group='metrics.k8s.io', version='v1beta1', plural='nodes',
-                name=node_name).get('usage')
+                name=node.metadata.name).get('usage')
 
             node_cpu_nano = int(node_usage['cpu'][:-1])  # Remove the 'n' suffix
             node_mem_kib = int(node_usage['memory'][:-2])  # Remove the 'Ki' suffix
 
-            node_cpu_mili = str(int(round(node_cpu_nano / 1000000))) + 'm'
-            node_mem_mib = str(int(round(node_mem_kib / 1024, 0))) + 'Mi'
+            node_cpu_mili = int(round(node_cpu_nano / 1000000))
+            node_mem_mib = int(round(node_mem_kib / 1024, 0))
 
-            return {'cpu': node_cpu_mili, 'memory': node_mem_mib}
+            return [node_cpu_mili, node_mem_mib]
         except ApiException as e:
             logger.error(e)
 
@@ -465,7 +490,7 @@ class Action(BaseFunctionalities):
                     get API of kubernetes for accessing by object for Metrics Monitoring
 
                 :param namespace: str
-                    name of used namespace: default is 'prokube'
+                    name of used namespace: default is 'edgeaibus'
 
                 :param workloads_path: str
                     path of workloads
@@ -838,6 +863,7 @@ class Action(BaseFunctionalities):
                  to_node_name: str,
                  to_node_id: int,
                  src_context= str,
+                 target_image = str,
                  namespace: str = None):
         """Move a Pod from a node to another one
             we will create a new instance from a service with different name and remove previous one
@@ -878,13 +904,20 @@ class Action(BaseFunctionalities):
 
         # make sure this pod does not exist already on the destination node
         # TODO: Update this for scaling on same node
-        if to_node_name == previousPod.spec.node_name and previousPod.spec.containers[0].resources.limits == limits:
-            logger.info(f"[Migration] Pod {previousPodName} already exist in node"
-                        f" {previousPod.spec.node_name}.")
+        # if to_node_name == previousPod.spec.node_name and previousPod.spec.containers[0].resources.limits == limits:
+        #     logger.info(f"[Migration] Pod {previousPodName} already exist in node"
+        #                 f" {previousPod.spec.node_name}.")
 
-            return previousPod, previousService, previousService.status.load_balancer.ingress[0].ip
+        #     return previousPod, previousService, previousService.status.load_balancer.ingress[0].ip
 
-        logger.info(f"[Migration] Pod {previousPodName} migration from node {previousPod.spec.node_name} to "
+        if to_node_name is not None:
+            if (to_node_name == previousPod.spec.node_name) and (previousPod.spec.containers[0].resources.limits == limits) and (previousPod.spec.containers[0].image == target_image):
+                logger.info(f"[Migration] Pod {previousPodName} already exist in node"
+                            f" {previousPod.spec.node_name}.")
+
+                return previousPod, previousService, previousService.status.load_balancer.ingress[0].ip
+
+        logger.info(f"[Migration/ Model Switching] Pod {previousPodName} migration from node {previousPod.spec.node_name} to "
                     f"node {to_node_name} has started...")
 
         # extract service name from the pod name
@@ -903,6 +936,7 @@ class Action(BaseFunctionalities):
 
         container = previousPod.spec.containers[0]
         previousPod.spec.containers[0].name = newName
+        previousPod.spec.containers[0].image = target_image
         container.resources.requests = limits
         container.resources.limits = limits
         previousPod.spec.containers[0].resources.requests = limits
@@ -1045,7 +1079,7 @@ class KubeCluster:
 
         if namespace is None:
             # set default value for namespace
-            namespace = 'prokube'
+            namespace = 'edgeaibus'
 
         if utilization_server_image is None:
             # set default value for Utilization image

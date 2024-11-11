@@ -136,7 +136,7 @@ def construct_deployment(
 
     if namespace is None:
         # set default value for namespace
-        namespace = 'prokube'
+        namespace = 'edgeaibus'
 
     if env is None:
         env = [
@@ -227,7 +227,7 @@ def construct_pod(
 
     if namespace is None:
         # set default value for namespace
-        namespace = 'prokube'
+        namespace = 'edgeaibus'
 
     if env is None:
         env = dict(
@@ -297,7 +297,7 @@ def construct_service(
 
     if namespace is None:
         # set default value for namespace
-        namespace = 'prokube'
+        namespace = 'edgeaibus'
 
     if labels is None:
         labels = dict(

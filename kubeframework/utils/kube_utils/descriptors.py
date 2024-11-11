@@ -81,7 +81,7 @@ class KubeNode:
 class KubeService:
     """Service Descriptor"""
 
-    def __init__(self, id: str, pod: V1Pod, svc: V1Service):
+    def __init__(self, id: str, pod: V1Pod, svc: V1Service, model:str):
         """Constructor of Service Descriptor
 
         **NOTE** each Service refers to one Pod, so it should not be confiused
@@ -116,6 +116,8 @@ class KubeService:
 
         # Service Name
         self.service_name = get_service_name(svc)
+
+        self.model = model
 
     def __str__(self):
         return "Service(id='{}', container_name='{}', metadata_name='{}', node_name='{}, service_name:{}')".format(

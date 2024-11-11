@@ -34,7 +34,7 @@ class SimEdgeEnv(gym.Env, Scheduler):
             'scheduler_path': config['scheduler_path']})
         Scheduler.__init__(self, schedule_config) 
         self.no_action_on_overload = config['no_action_on_overloaded']
-        self.overload_threhold = config['overload_threshold']
+        self.workload = config['overload_threshold']
         self.consolidation_upper = config['consolidation_upper']
         self.consolidation_lower = config['consolidation_lower']
         self.accuracy_lower = config['accuracy_lower']
@@ -274,10 +274,12 @@ class SimEdgeEnv(gym.Env, Scheduler):
         
         self.datacenter.mean_yolo_sample_usages(self.yolo_random_samples, yoloindices)
 
+        # self.pred_repeat_handler
+
         observation = {
-            "cpu_predictions": np.tile(self.patch_np_preds[self.global_timesteps], self.datacenter.core_repeator),
+            "cpu_predictions": np.tile(self.patch_np_preds[self.global_timesteps], self.datacenter.core_repeator), 
             "hosts_resources_alloc": self.datacenter.hosts_resources_alloc[:,1:],
-            "hosts_resources_req": self.datacenter.hosts_resources_requested_sim[:,1:],
+            "hosts_resources_req": self.datacenter.hosts_resources_requested_sim,
             "hosts_resources_usage": self.datacenter.hosts_resources_usages,    ## usage oriented, Remove the need of timestep
             "containers_request": self.datacenter.containers_request[:, 1:],
             "containers_usage": self.datacenter.containers_resources_usage,     ## usage oriented, Remove the need of timestep

@@ -1,0 +1,342 @@
+{
+    "type_env": "sim-edge",
+    "checkpoint": 4,
+    "experiment_str": "IMPALA_SimEdgeEnv_da1af_00000_0_2024-10-13_12-54-07",
+    "episode_length": 7000,
+    "num_episodes": 1,
+    "algorithm": "IMPALA",
+    "penalty_accuracy": 10,
+    "penalty_sla": -4,
+    "penalty_consolidation": 10,
+    "num_workers": 3
+}{
+    "notes": "Datacenter Generation",
+    "nums": {
+        "num_clusters": 1,
+        "num_hosts": 6,
+        "hosts_per_cluster": 6,
+        "num_containers": 12,
+        "resources": 2,
+        "container_types": 1
+    },
+    "metrics": {
+        "ram": "mb",
+        "cpu": "core"
+    },
+    "hosts_cap_rng": {
+        "0": {
+            "ram": {
+                "cap": 4096,
+                "alloc": 2940,
+                "req": 1070,
+                "remain": 1870,
+                "step": 1
+            },
+            "cpu": {
+                "cap": 2000,
+                "alloc": 1930,
+                "req": 678,
+                "remain": 1252,
+                "step": 1
+            }
+        },
+        "1": {
+            "ram": {
+                "cap": 8192,
+                "alloc": 6320,
+                "req": 850,
+                "remain": 5470,
+                "step": 1
+            },
+            "cpu": {
+                "cap": 4000,
+                "alloc": 3920,
+                "req": 570,
+                "remain": 3350,
+                "step": 1
+            }
+        },
+        "2": {
+            "ram": {
+                "cap": 8192,
+                "alloc": 6320,
+                "req": 850,
+                "remain": 5470,
+                "step": 1
+            },
+            "cpu": {
+                "cap": 6000,
+                "alloc": 5920,
+                "req": 570,
+                "remain": 5350,
+                "step": 1
+            }
+        },
+        "3": {
+            "ram": {
+                "cap": 4096,
+                "alloc": 2940,
+                "req": 1070,
+                "remain": 1870,
+                "step": 1
+            },
+            "cpu": {
+                "cap": 2000,
+                "alloc": 1930,
+                "req": 678,
+                "remain": 1252,
+                "step": 1
+            }
+        },
+        "4": {
+            "ram": {
+                "cap": 8192,
+                "alloc": 6320,
+                "req": 850,
+                "remain": 5470,
+                "step": 1
+            },
+            "cpu": {
+                "cap": 4000,
+                "alloc": 3920,
+                "req": 570,
+                "remain": 3350,
+                "step": 1
+            }
+        },
+        "5": {
+            "ram": {
+                "cap": 8192,
+                "alloc": 6320,
+                "req": 850,
+                "remain": 5470,
+                "step": 1
+            },
+            "cpu": {
+                "cap": 6000,
+                "alloc": 5920,
+                "req": 570,
+                "remain": 5350,
+                "step": 1
+            }
+        }
+    },
+    "container_conf": {
+        "0": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            }
+        },
+        "1": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1000,
+                "max": 1000,
+                "step": 1
+            }
+        },
+        "2": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1500,
+                "max": 1500,
+                "step": 1
+            }
+        },
+        "3": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            }
+        },
+        "4": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1000,
+                "max": 1000,
+                "step": 1
+            }
+        },
+        "5": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1500,
+                "max": 1500,
+                "step": 1
+            }
+        },
+        "6": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            }
+        },
+        "7": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1000,
+                "max": 1000,
+                "step": 1
+            }
+        },
+        "8": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1500,
+                "max": 1500,
+                "step": 1
+            }
+        },
+        "9": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            }
+        },
+        "10": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1000,
+                "max": 1000,
+                "step": 1
+            }
+        },
+        "11": {
+            "ram": {
+                "min": 500,
+                "max": 500,
+                "step": 1
+            },
+            "cpu": {
+                "min": 1500,
+                "max": 1500,
+                "step": 1
+            }
+        }
+    },
+    "contexts": [
+        "gke_resonant-petal-367513_europe-west1-b_cluster-2"
+    ],
+    "images": [
+        "babarkhan93/yolo8n:0.1",
+        "babarkhan93/yolo8s:0.1"
+    ],
+    "versions": [
+        "yolov8n",
+        "yolov8s"
+    ],
+    "config_path": "~/.kube/config",
+    "seed": 42,
+    "env_config_base": {
+        "obs_elements": [
+            "cpu_predictions",
+            "hosts_resources_alloc",
+            "hosts_resources_req",
+            "hosts_resources_usage",
+            "containers_request",
+            "containers_usage",
+            "containers_accuracy",
+            "containers_hosts",
+            "sla_violations"
+        ],
+        "penalty_illegal": -10,
+        "penalty_sla": -4,
+        "penalty_consolidation": 10,
+        "penalty_accuracy": 10,
+        "episode_length": 100,
+        "accuracy_lower": 37.3,
+        "accuracy_upper": 44.9,
+        "consolidation_lower": 0,
+        "consolidation_upper": 0.8,
+        "usage_lower": 0.4,
+        "usage_upper": 1.0,
+        "sla_lower": 0,
+        "sla_upper": 0.1,
+        "no_action_on_overloaded": true,
+        "overload_threshold": 0.8,
+        "seed": 1,
+        "prediction_length": 6
+    },
+    "run_or_experiment": "IMPALA",
+    "learn_config": {
+        "vtrace": "True",
+        "vtrace_clip_rho_threshold": 2,
+        "vtrace_clip_pg_rho_threshold": 2,
+        "gamma": 0.95,
+        "lr": 0.0001,
+        "model": {
+            "fcnet_hiddens": [
+                128,
+                128
+            ],
+            "fcnet_activation": "linear",
+            "vf_share_layers": "true"
+        },
+        "train_batch_size": 512,
+        "vf_loss_coeff": 0.01,
+        "replay_proportion": 0.3,
+        "replay_buffer_num_slots": 300,
+        "train_batch_size_per_learner": 256,
+        "log_level": "INFO",
+        "num_gpus": 0,
+        "num_env_runners": 3,
+        "seed": 203,
+        "buffer_size": 2048
+    },
+    "stop": {
+        "timesteps_total": 1000000
+    }
+}

@@ -1,6 +1,5 @@
 from .simulation import (
-    SimEdgeEnv,
+    SimEdgeEnv
 )
-# from .kubernetes import (
-#     KubeEdgeEnv
-#     )
+
+from .kubernetes import KubeEdgeEnv

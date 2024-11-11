@@ -26,8 +26,21 @@
             "args": [
                 "--config-file", "datacenter_test",
                 "--type-env", "sim-edge",
-                "--num_containers", "6",
+                "--num_containers", "5",
                 "--episode-length", "7000",
+            ]
+        },
+        {
+            "name": "Python Debugger: GKE Test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--config-file", "datacenter_test",
+                "--type-env", "kube-edge",
+                "--num_containers", "6",
+                "--episode-length", "100",
             ]
         }
     ]

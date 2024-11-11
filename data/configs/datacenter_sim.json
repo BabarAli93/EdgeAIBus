@@ -4,7 +4,7 @@
         "num_clusters": 1,
         "num_hosts": 6,
         "hosts_per_cluster": 6,
-        "num_containers": 18,
+        "num_containers": 12,
         "resources": 2,
         "container_types": 1
     },
@@ -260,87 +260,12 @@
                 "max": 1500,
                 "step": 1
             }
-        },
-        "12":{
-            "ram": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            },
-            "cpu": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            }
-        },
-        "13":{
-            "ram": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            },
-            "cpu": {
-                "min": 1000,
-                "max": 1000,
-                "step": 1
-            }
-        },
-        "14":{
-            "ram": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            },
-            "cpu": {
-                "min": 1500,
-                "max": 1500,
-                "step": 1
-            }
-        },
-        "15":{
-            "ram": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            },
-            "cpu": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            }
-        },
-        "16":{
-            "ram": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            },
-            "cpu": {
-                "min": 1000,
-                "max": 1000,
-                "step": 1
-            }
-        },
-        "17":{
-            "ram": {
-                "min": 500,
-                "max": 500,
-                "step": 1
-            },
-            "cpu": {
-                "min": 1500,
-                "max": 1500,
-                "step": 1
-            }
         }
     },
-    "contexts": ["gke_essential-sum-426322-v9_us-central1-c_cluster-1"],
+    "contexts": ["gke_resonant-petal-367513_europe-west1-b_cluster-2"],
     "images": ["babarkhan93/yolo8n:0.1", "babarkhan93/yolo8s:0.1"],
     "versions":["yolov8n", "yolov8s"],
     "config_path": "~/.kube/config",
-    "datacenter_start_time": 0,
-    "datacenter_end_time": 5000,
-    "num_steps" : 20,
     "seed": 42,
     "env_config_base": {
       "obs_elements": ["cpu_predictions", "hosts_resources_alloc", "hosts_resources_req", "hosts_resources_usage",
