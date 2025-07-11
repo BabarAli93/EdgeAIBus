@@ -9,7 +9,7 @@ import time
 import csv
 
 from kubeframework.utils.kube_utils.multi_cluster import MultiCluster
-from .Deployment import *
+#from .Deployment import *
 from kubeframework.utils.kube_utils.utils import (
     get_node_capacity,
     get_node_availability,
@@ -97,7 +97,7 @@ class DatacenterGeneration:
             self.hosts_resources_cap = np.full((self.num_hosts, 3), -1)
             self.hosts_resources_alloc = np.full((self.num_hosts, 3), -1)
             self.hosts_resources_remain = np.full((self.num_hosts, 3), -1)
-            self.hosts_resources_req = np.full((self.num_hosts, 3), -1)
+            self.hosts_resources_req = np.full((self.num_hosts, 2), -1)
             self.sla_violation = np.zeros(self.num_containers, dtype=float)
 
             self.images = config['images']
@@ -130,7 +130,7 @@ class DatacenterGeneration:
             ## make use of contexts here
             self.contexts = config['contexts']
             self.config_path = config['config_path']
-            _, self.hosts_resources_req_yolo = self.hosts_resources_requested_init(self.hosts_cap_rng)
+            #_, self.hosts_resources_req_yolo = self.hosts_resources_requested_init(self.hosts_cap_rng)
 
             _ = self.generateCluster()  # TODO: check what it returns
 
@@ -144,8 +144,9 @@ class DatacenterGeneration:
             self.hosts_resources_alloc = self.hosts_resources_allocatable_sim(self.hosts_cap_rng)
             self.hosts_resources_remain = self.hosts_resources_remaining_init(self.hosts_cap_rng)
             self.hosts_resources_req, self.hosts_resources_req_yolo = self.hosts_resources_requested_init(self.hosts_cap_rng)
+            self.hosts_resources_req_init = deepcopy(self.hosts_resources_req)
             self.hosts_resources_util[:, 0] = self.hosts_resources_alloc[:, 0]
-            self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req[:,1:]/self.hosts_resources_alloc[:, 1:])*100
+            self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req[:,:]/self.hosts_resources_alloc[:, 1:])*100
             
             _ = self.randomDeployment()
             
@@ -211,11 +212,11 @@ class DatacenterGeneration:
 
         self.kube_nodes = np.array([node for node in kube_nodes])
 
-        hosts_requests_local = self.hosts_resources_requested()
-        self.hosts_requested_list.append(pd.DataFrame(hosts_requests_local))
-        self.hosts_remaining_list.append(pd.DataFrame(self.hosts_resources_remaining()))
+        self.hosts_resources_req_init = deepcopy(self.hosts_resources_requested())
+        self.hosts_requested_list.append(pd.DataFrame(self.hosts_resources_req_init))
+        self.hosts_remaining_list.append(pd.DataFrame(self.hosts_resources_remaining))
         self.hosts_resources_util[:, 0] = self.hosts_resources_alloc[:, 0]
-        self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req[:,1:]/self.hosts_resources_alloc[:, 1:])*100
+        self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req/self.hosts_resources_alloc[:, 1:])*100
         self.hosts_resources_usage = self.hosts_resources_usage_gke
         
         return self.cluster_collection, self.clusters
@@ -280,7 +281,7 @@ class DatacenterGeneration:
                     val = int(val)
                     if np.all(self.hosts_resources_remain[val][1:] >= self.containers_request[container][1:]):
                         self.hosts_resources_remain[val][1:] -= self.containers_request[container][1:] # add an upper bound 30MB in here
-                        self.hosts_resources_req[val][1:] += self.containers_request[container][1:]
+                        self.hosts_resources_req[val] += self.containers_request[container][1:]
                         #cost += (self.containers_request[container][1]/1000)
                         self.containers_hosts[container] = val
                         self.containers_hosts_tuple[container] = (val, self.containers_request[container][1]) # it will update (node, core) tuple
@@ -299,7 +300,7 @@ class DatacenterGeneration:
         print(self.containers_hosts_tuple)
         cost += np.sum(self.containers_request[:,1]/1000)
         print(f'Remaining resources: {self.hosts_resources_remain}')
-        self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req[:,1:]/self.hosts_resources_alloc[:, 1:])*100
+        self.hosts_resources_util[:, 1:]  = (self.hosts_resources_req/self.hosts_resources_alloc[:, 1:])*100
         print(f'Hosts Utilizatons: {self.hosts_resources_util}')
 
         # This should have been done in constructor - Containers_hosts -> index is service, value is node id
@@ -381,6 +382,7 @@ class DatacenterGeneration:
     ## write migration function
     def migrate(self, gke_action: np.array): 
         # self.containers_hosts_obj => it has KubeNodes objects not the V1Node
+    
         self.containers_hosts_obj = self.kube_nodes[self.containers_hosts]
 
         for idx, (service, node) in enumerate(zip(self.services, self.containers_hosts_obj)):
@@ -467,7 +469,7 @@ class DatacenterGeneration:
         host_capacity = self.hosts_resources_capacities()
         host_alloc = self.hosts_resources_allocatable()
         hosts_requested = self.hosts_resources_requested()
-        hosts_remaining = self.hosts_resources_remaining()
+        hosts_remaining = self.hosts_resources_remaining
 
         df_host_capacity = pd.DataFrame(host_capacity)
         df_hosts_remaining = pd.DataFrame(hosts_remaining)
@@ -480,45 +482,7 @@ class DatacenterGeneration:
 
         num_migrations = sum(1 for x, y in zip(prev_node_names, self.gke_node_name) if x != y)
 
-        return self.ip_model_image, num_migrations, cost
-
-
-    def binpackDeployment(self):
-        # TODO: Deploy nodes in binpacking fashion
-        # The idea is to sort the nodes in descending order of the remaining resources.
-        # Pop a node from this set; Deploy Maximum containers, When filled, pop next node
-        # Assumption: self.hosts_resources_available has hosts sorted in ascending order. We will use index as ID
-
-        host_list = list(np.arange(self.num_hosts))
-        popped_hosts = []
-        node = host_list.pop()
-        host_list.append(node)
-        #try:
-        for container in range(self.num_containers):
-            # sort the popped list, run the lop on this and then pop a new node if the existing fails to host the container
-            pass
-
-        #except:
-
-        # for container in range(self.num_containers):
-        #     for pop_host in popped_hosts:
-        #         if np.all(self.host_resources_available(pop_host) >= self.containers_resources_request[container][1:]):
-        #             self.containers_hosts = pop_host
-        #         else:
-        #             available_resources = self.hosts_resources_available
-        #             sorted_indices = np.lexsort((available_resources[:, 1], available_resources[:, 0]))
-        #             sorted_hosts = available_resources[sorted_indices].tolist()
-        #             host = sorted_hosts.pop()
-        #             # append the popped node into the list and use this list to the maximum
-        #             popped_hosts.append(host)
-
-        return self.containers_hosts
-
-
-    # def container_model_assignment(self):
-        
-    #     for index in range(self.containers_model.shape[0]):
-    #         self.containers_model[index] = 1
+        return self.ip_model_image, num_migrations
 
     
     def containers_requests(self):
@@ -626,6 +590,7 @@ class DatacenterGeneration:
                                                     axis=1)
         return hosts_resources_alloc.astype(int)
     
+    @property
     def hosts_resources_remaining(self):
 
         """This function provides reamining resources available on each node for allocations
@@ -639,7 +604,7 @@ class DatacenterGeneration:
         if np.any(self.hosts_resources_remain[:, 0] == -1):
             self.hosts_resources_remain[:, 0] = self.hosts_resources_alloc[:, 0]
 
-        self.hosts_resources_remain[:, 1:] = self.hosts_resources_alloc[:, 1:] -  self.hosts_resources_req[:, 1:]
+        self.hosts_resources_remain[:, 1:] = self.hosts_resources_alloc[:, 1:] -  self.hosts_resources_req
         
         return self.hosts_resources_remain
     
@@ -707,7 +672,7 @@ class DatacenterGeneration:
                         
                         total_memory_requests = total_memory_requests + 40 # adding a bound on safe side after examining oN GKE Dashboard (893 vs 857)
                         print(f"Requested Resources of {node_name}: CPU: {total_cpu_requests}, Memory: {total_memory_requests}")     
-                self.hosts_resources_req[i] = [i, total_cpu_requests, total_memory_requests]
+                self.hosts_resources_req[i] = [total_cpu_requests, total_memory_requests]
                 print(f'Node: {i}, Container CPU: {total_cpu_requests_edgeaibus}')
                 cost += total_cpu_requests_edgeaibus
 
@@ -730,7 +695,7 @@ class DatacenterGeneration:
             nodes_cpu_cap = key['cpu']['req']
             nodes_cpu[int(index)] = nodes_cpu_cap
 
-        hosts_resources_req = np.concatenate((nodes_ids, nodes_cpu, nodes_ram),
+        hosts_resources_req = np.concatenate((nodes_cpu, nodes_ram),
                                                     axis=1)
         hosts_resources_req_yolo = np.concatenate((nodes_cpu, nodes_ram), axis=1)
         
@@ -777,37 +742,6 @@ class DatacenterGeneration:
         # it will return an array of containers hosted inside in a given host
         return np.where(self.containers_hosts == host_id)[0]
 
-    # @property
-    # def containers_resources_usage(self):
-    #     """return the fraction of resource usage for each node
-    #     workload at current timestep e.g. at time step 0:
-    #     """
-    #     """this one is based on the usage model not the request. We will update it for dynamic use case"""
-    #     # TODO: Update it for Dynamic use case
-    #     self.containers_types = []
-    #     for index, val in enumerate(self.container_types_map):
-    #         self.containers_types.extend(itertools.repeat(index, val))
-    #     containers_workloads = np.array(list(map(lambda container_type: self.start_workload[container_type], self.containers_types)))
-    #     containers_resources_usage = containers_workloads * self.containers_resources_request[:, 1:]
-    #     return containers_resources_usage
-    
-    # def containers_resources_request(self, containers_conf):
-
-    #     container_ids = np.arange(self.num_containers).reshape(self.num_containers, 1)
-    #     containers_ram = np.zeros((self.num_containers, 1))
-    #     containers_cpu = np.zeros((self.num_containers, 1))
-    #     for index, key in containers_conf.items():
-    #         container_ram_cap = key['ram']['max']
-    #         containers_ram[int(index)] = container_ram_cap
-
-    #         containers_cpu_cap = key['cpu']['max']
-    #         containers_cpu[int(index)] = containers_cpu_cap
-
-    #     containers_resources_request = np.concatenate((container_ids, containers_cpu,
-    #                                                    containers_ram),
-    #                                                     axis=1)
-        
-    #     return containers_resources_request.astype(int)
 
     @property
     def containers_resources_usage(self):
@@ -869,6 +803,10 @@ class DatacenterGeneration:
         active_nodes_ids = sorted(set(np.unique(self.containers_hosts)))
         active_nodes = [self.nodes_collection[node_id] for node_id in active_nodes_ids]
         resource_usage = self.clusters[0]['cluster_obj'].monitor.get_nodes_metrics_top(active_nodes)
+        active_resources = self.hosts_resources_alloc[
+            np.isin(self.hosts_resources_alloc[:, 0], list(active_nodes_ids))
+        ]
+        resource_usage = resource_usage/active_resources[:, 1:]
         resource_usage = np.array(resource_usage)
         return  np.mean(resource_usage, axis=0)
     
@@ -933,7 +871,7 @@ class DatacenterGeneration:
             container_in_host = np.where(self.containers_hosts == host)[0]
             if len(container_in_host) > 0:
                 host_resources_request = sum(self.containers_request[container_in_host][:, 1])
-                host_resources_request += self.hosts_resources_req_yolo[host][0]
+                host_resources_request += self.hosts_resources_req_init[host][0]
                 host_resources_request = host_resources_request/self.hosts_resources_alloc[host][1]
                 host_resources_oversub.append(host_resources_request)
 
@@ -954,7 +892,7 @@ class DatacenterGeneration:
 
         return np.array(sla_list)
     
-    def yolo_sla_gke(self, user_traffic: None):
+    def yolo_sla_gke(self, user_traffic = None):
         # TODO write the logic to calculalte SLA for each container and return numpy array
 
         if not self.yolosla_processed:
@@ -973,8 +911,26 @@ class DatacenterGeneration:
 
         else:
             return self.sla_violation 
+    
 
+    def minimum_availability_check(self, gke_action):
+        """
+            On top of overloading check, this function ensures the host has enough resources to create container
+            For example, there is model switch on the same node for 1.5 core container but the node has only 1 core free.
+            By the logic of 'creation first, deletion later', it is not feasible. Thus, this function handles it
+            """
+        hosts_resoruces_gke_local = deepcopy(self.hosts_resources_requested_gke)
         
+        for container, host in enumerate(self.containers_hosts):
+            # get the resource request of this container
+            container_request = self.containers_request[container,1:]
+            if np.all(hosts_resoruces_gke_local[host] + container_request < self.hosts_resources_alloc[host, 1:]):
+                continue
+            else:
+                # do not change it
+                gke_action[container] = 0
+
+        return gke_action
 
         
     @property
@@ -999,7 +955,7 @@ class DatacenterGeneration:
         for host in range(self.num_hosts):
             container_in_host = np.where(self.containers_hosts == host)[0]
             host_resources_usage = sum(self.containers_request[container_in_host][:, 1:])
-            host_resources_usage += self.hosts_resources_req_yolo[host]
+            host_resources_usage += self.hosts_resources_req_init[host]
             #if type(host_resources_usage) != np.ndarray:
             #    host_resources_usage = np.zeros(self.num_resources)
             hosts_resources_request.append(host_resources_usage)

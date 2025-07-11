@@ -1,5 +1,5 @@
 import os
-from scheduler.oskube.envs import SimEdgeEnv, KubeEdgeEnv
+from scheduler.edgeaibus.envs import SimEdgeEnv, KubeEdgeEnv
 
 # dfined by the user
 
@@ -7,7 +7,7 @@ import pathlib
 
 p = pathlib.Path(__file__)
 
-PROJECT_PATH = "/home/babarali/OSKube"
+PROJECT_PATH = "/home/babarali/EdgeAIBus" # set the path of the EdgeAIBus project
 # DATA_PATH = "/data"
 
 # generated baesd on the users' path

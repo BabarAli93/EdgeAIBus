@@ -26,8 +26,9 @@
             "args": [
                 "--config-file", "datacenter_test",
                 "--type-env", "sim-edge",
-                "--num_containers", "5",
-                "--episode-length", "7000",
+                "--num_containers", "6",
+                "--episode-length", "5000",
+                "--ml-scheduler", "False"
             ]
         },
         {
@@ -40,7 +41,8 @@
                 "--config-file", "datacenter_test",
                 "--type-env", "kube-edge",
                 "--num_containers", "6",
-                "--episode-length", "100",
+                "--episode-length", "60",
+                "--ml-scheduler", "True"
             ]
         }
     ]

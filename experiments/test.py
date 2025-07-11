@@ -23,6 +23,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from datacenter.Datacenter import *
 from workload.Workload_v2 import *
+from scheduler.msb import *
+from scheduler.gko import *
 
 pp = PrettyPrinter(indent=4)
 # get an absolute path to the directory that contains parent files
@@ -40,7 +42,7 @@ from utils.class_builder import make_env_class
 def run_experiments(
     *, config_file, type_env: str, local_mode: bool,
     episode_length, num_episodes: int, checkpoint_to_load: str, 
-    num_containers:int):
+    num_containers:int, ml_scheduler: bool):
     
     experiment_folder = os.path.join(TRAIN_RESULTS_PATH, 
                                "IMPALA_{}".format(num_containers))
@@ -98,32 +100,38 @@ def run_experiments(
         ray_config = {"env": type_env}
         ray_config.update(learn_config)
 
-    if checkpoint_to_load=='last':
-        checkpoint_string = sorted([
-            s for s in filter (
-                lambda x: 'checkpoint' in x, os.listdir(
-                    os.path.join(
-                        experiment_folder, experiment_str)))])[-1]
-        checkpoint = int(checkpoint_string.replace('checkpoint_',''))
-        checkpoint_path = os.path.join(
-            experiment_folder,
-            experiment_str,
-            checkpoint_string
-        )
-        checkpoint_to_load_info = checkpoint
+    if ml_scheduler:
+        if checkpoint_to_load=='last':
+            checkpoint_string = sorted([
+                s for s in filter (
+                    lambda x: 'checkpoint' in x, os.listdir(
+                        os.path.join(
+                            experiment_folder, experiment_str)))])[-1]
+            checkpoint = int(checkpoint_string.replace('checkpoint_',''))
+            checkpoint_path = os.path.join(
+                experiment_folder,
+                experiment_str,
+                checkpoint_string
+            )
+            checkpoint_to_load_info = checkpoint
+        else:
+            checkpoint_path = os.path.join(
+                experiment_folder,
+                experiment_str,
+                # os.listdir(experiments_folder)[0],
+                f"checkpoint_{checkpoint_to_load}",
+                f"checkpoint-{int(checkpoint_to_load)}"
+            )
+            checkpoint_to_load_info = int(checkpoint_to_load)
+            
+        agent = Algorithm.from_checkpoint(checkpoint_path)
     else:
-        checkpoint_path = os.path.join(
-            experiment_folder,
-            experiment_str,
-            # os.listdir(experiments_folder)[0],
-            f"checkpoint_{checkpoint_to_load}",
-            f"checkpoint-{int(checkpoint_to_load)}"
-        )
-        checkpoint_to_load_info = int(checkpoint_to_load)
+        # TODO: initiate custom scheduler - Non ML
+        checkpoint_to_load_info =  -1
+        agent =  MSB(datacenter=datacenter)
+        #agent =  GKO(datacenter=datacenter)
         
     episodes = []
-    agent = Algorithm.from_checkpoint(checkpoint_path)
-
     for i in range(0, num_episodes):
         print(f"---- \nepisode: {i} ----\n")
         episode_reward = 0
@@ -134,12 +142,16 @@ def run_experiments(
         # start = time.time()
         iter = 0
         while not done:
-            print(f'\n##################   Iteration {i}   #######################')
+            print(f'\n##################   Iteration {iter}   #######################')
+            start_time = time.perf_counter()
             action = agent.compute_single_action(obs)
             obs, reward, done, truncate, info = env.step(action)
             state = flatten(env.observation, action, reward, info)
             states.append(state)
             episode_reward += reward
+            end_time = time.perf_counter()
+            inference_time = (end_time - start_time)*1000
+            state['inference_time_ms'] = inference_time
             iter += 1
         states = pd.DataFrame(states)
         print(f"episode reward: {episode_reward}")
@@ -209,19 +221,20 @@ def flatten(raw_obs, action, reward, info):
 
 
 @click.command()
-@click.option('--config-file', type=str, default='datacenter_sim')
+@click.option('--config-file', type=str, default='datacenter_test')
 @click.option('--local-mode', type=bool, default=True)
+@click.option('--ml-scheduler', type=bool, default=True)
 @click.option('--num_containers', required= True, type=int, default=6)
 @click.option('--type-env', required=True,
               type=click.Choice(['sim-edge', 'kube-edge']),
               default='sim-edge')
-@click.option('--episode-length', required=False, type=int, default=1000)
+@click.option('--episode-length', required=False, type=int, default=60)
 @click.option('--num-episodes', required=False, type=int, default=1)
 @click.option('--checkpoint-to-load', required=False, type=str, default='last')
 
 def main(config_file: str, local_mode: bool, type_env: str,
          num_episodes: int, episode_length: int, num_containers:int,
-         checkpoint_to_load: str):
+         checkpoint_to_load: str, ml_scheduler: bool):
     """[summary]
     Args:
         local_mode (bool): run in local machine
@@ -233,7 +246,7 @@ def main(config_file: str, local_mode: bool, type_env: str,
     run_experiments(config_file=config_file,type_env=type_env,
         num_episodes=num_episodes, episode_length=episode_length,
         local_mode=local_mode, num_containers = num_containers,
-        checkpoint_to_load=checkpoint_to_load)
+        checkpoint_to_load=checkpoint_to_load, ml_scheduler=ml_scheduler)
     
 
 if __name__ == "__main__":
