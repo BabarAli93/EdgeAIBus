@@ -6,3 +6,14 @@ Containerized Edge computing offers lightweight, reliable, and quick solutions t
 <p align="center">
   <img src="https://github.com/user-attachments/assets/4b9af656-5176-4f1a-83a4-b8f5ccbd45ca" alt="EdgeAIBus">
 </p>
+
+# Cite this work
+```bibtex
+@ARTICLE{ali2025edgeaibus,
+  author={Ali, Babar and Golec, Muhammed and Gill, Sukhpal Singh and Cuadrado, Felix and Uhlig, Steve},
+  journal={IEEE Transactions on Parallel and Distributed Systems}, 
+  title={EdgeAIBus: AI-driven Joint Container Management and Model Selection Framework for Heterogeneous Edge Computing}, 
+  year={2025},
+  pages={1-12},
+  doi={10.1109/TPDS.2025.3602521}}
+```
