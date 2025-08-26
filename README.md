@@ -17,3 +17,7 @@ Containerized Edge computing offers lightweight, reliable, and quick solutions t
   pages={1-12},
   doi={10.1109/TPDS.2025.3602521}}
 ```
+
+# License
+BSD-3-Clause. Copyright (c) 2025, Babar Ali. All rights reserved.
+See the [License](https://github.com/BabarAli93/EdgeAIBus/blob/main/LICENSE) file for more details.
